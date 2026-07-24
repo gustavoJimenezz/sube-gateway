@@ -1,0 +1,12 @@
+# Entorno virtual y carpetas de compilación
+sube-local-gateway/.venv/
+sube-local-gateway/build/
+sube-local-gateway/dist/
+
+# Archivo de configuración de PyInstaller
+sube-local-gateway/sube-local-gateway.spec
+
+
+sube-extension-gateway/dist/
+sube-extension-gateway/node_modules/
+sube-extension-gateway/package-lock.json
