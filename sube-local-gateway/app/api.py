@@ -1,7 +1,6 @@
 import re
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
 from .sube_controller import SubeApp
@@ -32,76 +31,78 @@ app.add_middleware(
 )
 
 # -----------------------------------------------------------------------------
-# Modelos de Respuesta (Pydantic)
+
 # -----------------------------------------------------------------------------
-from typing import Literal
-from pydantic import BaseModel, Field
+import json
+from dataclasses import dataclass, asdict
+from typing import Literal, Optional
 
-class StatusResponse(BaseModel):
-    status: Literal["open", "closed"] = Field(
-        ...,
-        description="Indicates whether the SUBE application is open or closed"
-    )
+@dataclass
+class StatusResponse:
+    """Indicates whether the SUBE application is open or closed."""
+    status: Literal["open", "closed"]
 
+    def to_dict(self) -> dict:
+        return asdict(self)
 
-class AccionResponse(BaseModel):
-    status: Literal["success", "error"] = Field(
-        ..., 
-        description="Result of the action, either success or error"
-    )
-    message: Optional[str] = Field(None, description="Additional message or error details")
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
 
 
-class ReadCardResponse(BaseModel):
+@dataclass
+class AccionResponse:
+    """Result of the action, either success or error."""
+    status: Literal["success", "error"]
+    message: Optional[str] = None
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+
+@dataclass
+class ReadCardResponse:
     """Response when attempting to read a SUBE card.
 
-    status: Result of the operation: 'success' if read correctly,
-    'error' otherwise.
+    status: Result of the operation: 'success' if read correctly, 'error' otherwise.
     """
-    status: Literal["success", "error"] = Field(
-        ..., description="Result of the read operation"
-    )
-    card_number: Optional[str] = Field(
-        None, description="Card number read (if applicable)"
-    )
-    balance: Optional[float] = Field(
-        None, description="Available balance on the card (if applicable)"
-    )
-    message: Optional[str] = Field(
-        None, description="Additional message or error details"
-    )
-    
+    status: Literal["success", "error"]
+    card_number: Optional[str] = None
+    balance: Optional[float] = None
+    message: Optional[str] = None
 
-class CreditBalanceResponse(BaseModel):
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+
+@dataclass
+class CreditBalanceResponse:
     """Response when attempting to credit balance on a SUBE card.
 
-    status: Result of the operation: 'success' if credited correctly,
-    'error' otherwise.
+    status: Result of the operation: 'success' if credited correctly, 'error' otherwise.
     """
-    # [debug] Data: ['Saldo anterior:', 'Importe cargado:', 'Saldo:', 'Importe pendiente:', '$1675,71', '$2000,00', '$3675,71', '$0,00']
-        
-    status: Literal["success", "error"] = Field(
-        ..., description="Result of the credit operation"
-    )
-    previous_balance: Optional[float] = Field(
-        None, description="Previous balance before the credit operation"
-    )
-    amount_loaded: Optional[float] = Field(
-        None, description="Amount loaded onto the card"
-    )
-    new_balance: Optional[float] = Field(
-        None, description="New balance after the credit operation"
-    )
-    pending_amount: Optional[float] = Field(
-        None, description="Pending amount after the operation"
-    )
-    message: Optional[str] = Field(
-        None, description="Additional message or error details"
-    )
+    status: Literal["success", "error"]
+    previous_balance: Optional[float] = None
+    amount_loaded: Optional[float] = None
+    new_balance: Optional[float] = None
+    pending_amount: Optional[float] = None
+    message: Optional[str] = None
 
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
+
+# -----------------------------------------------------------------------------
 # B. EndPoint GET /status
 # -----------------------------------------------------------------------------
 @app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
