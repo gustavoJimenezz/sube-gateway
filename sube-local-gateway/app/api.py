@@ -101,10 +101,7 @@ class CreditBalanceResponse:
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
-# import pdb; pdb.set_trace()
-# sube_controller.open()
-sube_controller.close()
-
+import pdb; pdb.set_trace()
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
@@ -149,7 +146,7 @@ async def close_application():
         if success:
             return AccionResponse(status="success", message="Application closed successfully")
         else:
-            return AccionResponse(status="error", message="Error closing the application")
+            return AccionResponse(status="error", message="Application was not running or could not be closed")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 

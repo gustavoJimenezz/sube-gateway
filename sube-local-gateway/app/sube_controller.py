@@ -89,7 +89,7 @@ class WindowSube(WindowController):
             return app.window(handle=hwnd)
         except Exception as e:
             raise AppConnectionError(self.title_pattern, message="Unable to connect to the application") from e
-    
+
     def is_open(self, process_name: str) -> bool:
         """
         Verifies if the process is active in Windows.
@@ -99,9 +99,9 @@ class WindowSube(WindowController):
                 name = proc.info['name']
                 if name and re.search(process_name, name, re.IGNORECASE):
                     return True
-
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
+                
         return False
     
     def minimize(self):
@@ -125,12 +125,6 @@ class SubeApp():
         self.window = WindowSube(self.window_title)
         self._process = None
 
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_fixed(2),
-        retry=retry_if_result(lambda res: res is False),
-        reraise=True
-    )
     def status(self, max_atemps=5, pause=2) -> bool:
         """
         Checks if the SUBE application is currently running.
@@ -140,44 +134,24 @@ class SubeApp():
 
         logger.info(f"[*] status ...")
         return self.window.is_open(self.procces_name)
-
-
-    @retry(
-        stop=stop_after_attempt(5),
-        wait=wait_fixed(1),
-        retry=retry_if_result(lambda res: res is False),
-        reraise=True
-    )
-    def _stop_process(self) -> bool:
-        if self._process.poll() is not None:
-            logger.info("[+] Process stopped successfully.")
-            return True
-        return False
-
+    
     def close(self) -> bool:
-        """Terminates the process."""
-
+        """Terminates the application process using window connection."""
         logger.info("[-] Stopping application...")
-        import pdb; pdb.set_trace()
-        if self.window.is_open(self.procces_name):
-            logger.info("[*] Application is running. Attempting to stop...")
-            return False
 
         try:
-            logger.info("[*] Application is running. Attempting to terminate...")
-            self._process.terminate()
-            return self._stop_process() 
+            if self.status(self.procces_name):
+                logger.info("[*] Attempting to close via UI...")
+                app_window = self.window.connect(timeout=5)
+                if app_window:
+                    app_window.close()
+                    logger.info("[+] Process stopped successfully.")
+                time.sleep(1.5)
+                
         except Exception as e:
-            logger.error(f"[!] Error standard stopping: {e}. Preparing force kill...")
-
-        try:
-            logger.warning("[!] Forcing process destruction...")
-            self._process.kill()
-            return True
-        except Exception as kill_err:
-            logger.error(f"[!] Critical: Could not kill process: {kill_err}")
-            return False
-
+            logger.warning(f"[!] UI interaction finished or skipped: {e}")
+        
+        return self.status(self.procces_name) is False
     
     @retry(
         stop=stop_after_attempt(3),
@@ -207,21 +181,21 @@ class SubeApp():
         """
         Verifies if the application is running and starts it if not.
         """
-        if self.window.is_open(self.procces_name):
-            logger.info("[*] The application is currently running.")
-            return True
+        logger.info("[*] Opening application...")
         
         try:
-            self._start_process()
-            time.sleep(0.5) 
-
+            if not self.status(self.procces_name):
+                self._start_process()
+                time.sleep(1.5)
+            
             self.window.minimize()
-            logger.info("[+] Application opened, verified, and successfully minimized.")
-            return True
+            logger.info("[+] Application process verified and window minimized.")
+            
         except Exception as e:
-            logger.error(f"[!] Error verifying or minimizing the window: {e}")
-            return False
- 
+            logger.warning(f"[!] Issue during application startup or minimization: {e}")
+
+        return self.status(self.procces_name) is True
+    
     def scan_card(self) -> dict:
         """
         Interact with the interface, press “Consultar saldo”
