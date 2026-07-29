@@ -106,11 +106,11 @@ sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_
 # B. EndPoint GET /status
 # -----------------------------------------------------------------------------
 @app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
-async def get_status():
+async def getstatus():
     """
     Checks whether the SUBE application is running.
     """
-    if sube_controller._status():
+    if sube_controller.status():
         return StatusResponse(status="open")
     return StatusResponse(status="closed")
  
@@ -124,7 +124,7 @@ async def open_application():
     Checks the application status and starts.
     """
     try:
-        success = sube_controller.start_app()
+        success = sube_controller.open()
         if success:
             return AccionResponse(status="success", message="Application started successfully")
         else:

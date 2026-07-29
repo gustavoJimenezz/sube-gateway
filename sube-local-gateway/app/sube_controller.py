@@ -5,6 +5,7 @@ import subprocess
 import psutil
 import win32gui
 import win32con
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type
 from pywinauto import Application
 from pathlib import Path
 from .logger_config import setup_logger
@@ -93,7 +94,6 @@ class WindowSube(WindowController):
         """
         Verifies if the process is active in Windows.
         """
-        
         for proc in psutil.process_iter(['name']): 
             try:
                 name = proc.info['name']
@@ -120,19 +120,61 @@ class WindowSube(WindowController):
 class SubeApp():
     def __init__(self, exe_path, window_title, process_name):
         self.exe_path = exe_path
-        self.window_tittle = window_title
+        self.window_title = window_title
         self.procces_name = process_name
-        self.window = WindowSube(self.window_tittle)
+        self.window = WindowSube(self.window_title)
 
-    def _status(self) -> bool:
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(2),
+        retry=retry_if_result(lambda res: res is False),
+        reraise=True
+    )
+    def status(self, max_atemps=5, pause=2) -> bool:
         """
         Checks if the SUBE application is currently running.
         
         :return: True if the application is running, False otherwise.
         """
+
+        logger.info(f"[*] status ...")
         return self.window.is_open(self.procces_name)
 
-    def _launch_app(self) -> bool:
+
+    @retry(
+        stop=stop_after_attempt(5),
+        wait=wait_fixed(1),
+        retry=retry_if_result(lambda res: res is False),
+        reraise=True
+    )
+    def _stop_process(self) -> bool:
+        if self._process.poll() is not None:
+            logger.info("[+] Process stopped successfully.")
+            return True
+        return False
+
+    def close(self) -> bool:
+        """Terminates the process."""
+        if not self._process or self._process.poll() is not None:
+            logger.info("[*] The application is already stopped.")
+            return True
+
+        logger.info("[-] Stopping application...")
+        try:
+            self._process.terminate()
+            return self._stop_process()
+        except Exception as e:
+            logger.error(f"[!] Error standard stopping: {e}. Forcing kill...")
+            self._process.kill()
+            return True
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1),
+        retry=retry_if_exception_type((PermissionError, OSError)),
+        reraise=True
+    )
+    def _start_process(self) -> bool:
         """
         Verifies the existence of the executable and launches the process.
         
@@ -143,10 +185,14 @@ class SubeApp():
             return False
 
         logger.info("[+] Launching executable process ...")
-        subprocess.Popen(self.exe_path)
-        return True
+        try:
+            self._process = subprocess.Popen(self.exe_path)
+            return True
+        except (PermissionError, OSError) as e:
+            logger.warning(f"[-] Temporary error launching app: {e}. Retrying...")
+            raise e
 
-    def start_app(self) -> bool:
+    def open(self) -> bool:
         """
         Verifies if the application is running and starts it if not.
         """
@@ -154,17 +200,16 @@ class SubeApp():
             logger.info("[*] The application is currently running.")
             return True
         
-        attempts = 5
-        for i in range(attempts):
-            try:
-                if self._launch_app():
-                    time.sleep(2)
-                    self.window.minimize()
-                    logger.info("[*] Application opened and minimized.")
-                    return True
-            except Exception as e:
-                logger.error(f"[!] Connecting to the application {self.window_tittle} | attempt:{i+1}/{attempts} {str(e)}")
-                return False
+        try:
+            self._start_process()
+            time.sleep(0.5) 
+
+            self.window.minimize()
+            logger.info("[+] Application opened, verified, and successfully minimized.")
+            return True
+        except Exception as e:
+            logger.error(f"[!] Error verifying or minimizing the window: {e}")
+            return False
  
     def scan_card(self) -> dict:
         """
