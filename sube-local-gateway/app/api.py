@@ -101,9 +101,12 @@ class CreditBalanceResponse:
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
+# import pdb; pdb.set_trace()
+# sube_controller.open()
+sube_controller.close()
 
 # -----------------------------------------------------------------------------
-# B. EndPoint GET /status
+# EndPoint GET /status
 # -----------------------------------------------------------------------------
 @app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
 async def getstatus():
@@ -115,7 +118,7 @@ async def getstatus():
     return StatusResponse(status="closed")
  
 # -----------------------------------------------------------------------------
-# C. EndPoint POST /open
+# EndPoint POST /open
 # -----------------------------------------------------------------------------
 
 @app.post("/open", response_model=AccionResponse, tags=["Ciclo de Vida"])
@@ -133,7 +136,26 @@ async def open_application():
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 # -----------------------------------------------------------------------------
-# D. EndPoint POST /read
+# EndPoint POST /close
+# -----------------------------------------------------------------------------
+
+@app.post("/close", response_model=AccionResponse, tags=["Ciclo de Vida"])
+async def close_application():
+    """
+    Checks the application status and closes it.
+    """
+    try:
+        success = sube_controller.close()
+        if success:
+            return AccionResponse(status="success", message="Application closed successfully")
+        else:
+            return AccionResponse(status="error", message="Error closing the application")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+# -----------------------------------------------------------------------------
+# EndPoint POST /read
 # -----------------------------------------------------------------------------
 
 @app.post("/read", response_model=ReadCardResponse, tags=["Operaciones"])
@@ -189,7 +211,7 @@ def parse_card_data(data):
     return card_number, balance
 
 # -----------------------------------------------------------------------------
-# D. EndPoint POST /credit-balance
+# EndPoint POST /credit-balance
 # -----------------------------------------------------------------------------
 
 @app.post("/credit-balance", response_model=CreditBalanceResponse, tags=["Operaciones"])

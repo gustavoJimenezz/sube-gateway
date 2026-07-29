@@ -123,6 +123,7 @@ class SubeApp():
         self.window_title = window_title
         self.procces_name = process_name
         self.window = WindowSube(self.window_title)
+        self._process = None
 
     @retry(
         stop=stop_after_attempt(5),
@@ -155,18 +156,28 @@ class SubeApp():
 
     def close(self) -> bool:
         """Terminates the process."""
-        if not self._process or self._process.poll() is not None:
-            logger.info("[*] The application is already stopped.")
-            return True
 
         logger.info("[-] Stopping application...")
+        import pdb; pdb.set_trace()
+        if self.window.is_open(self.procces_name):
+            logger.info("[*] Application is running. Attempting to stop...")
+            return False
+
         try:
+            logger.info("[*] Application is running. Attempting to terminate...")
             self._process.terminate()
-            return self._stop_process()
+            return self._stop_process() 
         except Exception as e:
-            logger.error(f"[!] Error standard stopping: {e}. Forcing kill...")
+            logger.error(f"[!] Error standard stopping: {e}. Preparing force kill...")
+
+        try:
+            logger.warning("[!] Forcing process destruction...")
             self._process.kill()
             return True
+        except Exception as kill_err:
+            logger.error(f"[!] Critical: Could not kill process: {kill_err}")
+            return False
+
     
     @retry(
         stop=stop_after_attempt(3),
