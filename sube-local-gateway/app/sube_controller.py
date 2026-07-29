@@ -5,8 +5,9 @@ import subprocess
 import psutil
 import win32gui
 import win32con
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type, RetryError
 from pywinauto import Application
+from pywinauto.win32functions import GetSystemMetrics
 from pathlib import Path
 from .logger_config import setup_logger
 logger = setup_logger(__name__)
@@ -66,7 +67,29 @@ class WindowController:
             return placement[1] in (win32con.SW_SHOWMAXIMIZED, win32con.SW_NORMAL)
         return False
 
+    def reposition_to_right(self, title_pattern: str) -> None:
+        """
+        Moves the application window to the far-right side of the screen using Win32 API.
+        """
+        hwnd = self.get_window_handle(title_pattern)
 
+        if not hwnd:
+            logger.warning(f"[!] No window found matching pattern: {title_pattern}")
+            return
+
+        screen_width = GetSystemMetrics(0)
+        screen_height = GetSystemMetrics(1)
+        left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+        w_width = right - left
+        w_height = bottom - top
+
+        new_x = screen_width - w_width
+        new_y = (screen_height - w_height) // 2
+
+        win32gui.MoveWindow(hwnd, new_x, new_y, w_width, w_height, True)
+        logger.info(f"[+] Window repositioned via Win32 API to X: {new_x}, Y: {new_y}")
+
+        
 class WindowSube(WindowController):
     def __init__(self, title_pattern):
         self.title_pattern = title_pattern
@@ -115,7 +138,36 @@ class WindowSube(WindowController):
     
     def is_maximized(self):
         return self.is_window_maximized(self.title_pattern)
-    
+
+    def move_to_right(self):
+        return self.reposition_to_right(self.title_pattern)
+
+    def is_pattern_present_on_screen(self, regex_patterns):
+        """Scans the UI once using the window handle and returns True if any of the
+
+        provided regex patterns match the UI text, otherwise returns False.
+        """
+        hwnd = self.get_window_handle(self.title_pattern)
+
+        if not hwnd:
+            return False
+
+        app = Application(backend="uia").connect(handle=hwnd)
+        actual_window = app.window(handle=hwnd)
+
+        text_elements = actual_window.descendants(control_type="Text")
+        captured_texts = [
+            el.window_text().strip() for el in text_elements if el.window_text()
+        ]
+
+        full_ui_text = " ".join(captured_texts)
+
+        for pattern in regex_patterns:
+            if re.search(pattern, full_ui_text, re.IGNORECASE):
+                return True
+
+        return False
+
 
 class SubeApp():
     def __init__(self, exe_path, window_title, process_name):
@@ -123,7 +175,7 @@ class SubeApp():
         self.window_title = window_title
         self.procces_name = process_name
         self.window = WindowSube(self.window_title)
-        self._process = None
+        # self._process = None
 
     def status(self, max_atemps=5, pause=2) -> bool:
         """
@@ -134,6 +186,50 @@ class SubeApp():
 
         logger.info(f"[*] status ...")
         return self.window.is_open(self.procces_name)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1),
+        retry=retry_if_exception_type((PermissionError, OSError)),
+        reraise=True
+    )
+    def _start_process(self) -> bool:
+        """
+        Verifies the existence of the executable and launches the process.
+        
+        :return: True if successfully launched, False if the file does not exist.
+        """
+        if not os.path.exists(self.exe_path):
+            logger.error(f"Executable not found at {self.exe_path}")
+            return False
+
+        logger.info("[+] Launching executable process ...")
+        try:
+            subprocess.Popen(self.exe_path)
+            time.sleep(2)
+            return True
+        except (PermissionError, OSError) as e:
+            logger.warning(f"[-] Temporary error launching app: {e}. Retrying...")
+            raise e
+
+    def open(self) -> bool:
+        """
+        Verifies if the application is running and starts it if not.
+        """
+        logger.info("[*] Opening application...")
+        
+        try:
+            if not self.status(self.procces_name):
+                if self._start_process():
+                    self.window.move_to_right()
+                    self.window.minimize()
+    
+            logger.info("[+] Application process verified and window minimized.")
+            
+        except Exception as e:
+            logger.warning(f"[!] Issue during application startup or minimization: {e}")
+
+        return self.status(self.procces_name) is True
     
     def close(self) -> bool:
         """Terminates the application process using window connection."""
@@ -154,48 +250,34 @@ class SubeApp():
         return self.status(self.procces_name) is False
     
     @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_fixed(1),
-        retry=retry_if_exception_type((PermissionError, OSError)),
-        reraise=True
+        stop=stop_after_attempt(20),
+        wait=wait_fixed(0.5),
+        retry=retry_if_result(lambda result: result is None),
+        reraise=True,
     )
-    def _start_process(self) -> bool:
-        """
-        Verifies the existence of the executable and launches the process.
-        
-        :return: True if successfully launched, False if the file does not exist.
-        """
-        if not os.path.exists(self.exe_path):
-            logger.error(f"Executable not found at {self.exe_path}")
-            return False
+    def _wait_for_ui_data(self, app_window):
+        """Polls the UI once and returns the captured text once processing finishes."""
+        text_elements = app_window.descendants(control_type="Text")
+        captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
+        is_processing = any("procesando" in t.lower() or "aguardá" in t.lower() for t in captured_texts)
 
-        logger.info("[+] Launching executable process ...")
-        try:
-            self._process = subprocess.Popen(self.exe_path)
-            return True
-        except (PermissionError, OSError) as e:
-            logger.warning(f"[-] Temporary error launching app: {e}. Retrying...")
-            raise e
+        if not is_processing and captured_texts:
+            return captured_texts
+        return None
 
-    def open(self) -> bool:
-        """
-        Verifies if the application is running and starts it if not.
-        """
-        logger.info("[*] Opening application...")
-        
-        try:
-            if not self.status(self.procces_name):
-                self._start_process()
-                time.sleep(1.5)
-            
-            self.window.minimize()
-            logger.info("[+] Application process verified and window minimized.")
-            
-        except Exception as e:
-            logger.warning(f"[!] Issue during application startup or minimization: {e}")
+    def is_card_reader_connected(self):
+        patterns = [r"conect[aá] tu dispositivo"]
+        return not self.window.is_pattern_present_on_screen(patterns)
 
-        return self.status(self.procces_name) is True
-    
+    def is_card_scan_successful(self):
+        """Check the interface to confirm whether the SUBE card was read successfully."""
+        success_patterns = [
+            r"consulta de saldo",
+            r"sube nro",
+            r"\d{4}\s\d{4}\s\d{4}\s\d{4}" 
+        ]
+        return self.window.is_pattern_present_on_screen(regex_patterns=success_patterns)
+
     def scan_card(self) -> dict:
         """
         Interact with the interface, press “Consultar saldo”
@@ -205,33 +287,23 @@ class SubeApp():
             self.window.maximize()
 
         app_window = self.window.connect()
-        boton_consulta = app_window.Button4
-        boton_consulta.click_input()
-        
-        logger.info("[*] Waiting for a response from the reader hardware...")
-        
-        timeout = 20  # Maximum waiting time in seconds
-        start_time = time.time()
-        captured_texts = []
-        
-        while time.time() - start_time < timeout:
-            # Capture all text elements currently visible in the window
-            text_elements = app_window.descendants(control_type="Text")
-            captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
-            
-            # Check if the app is still processing the request
-            is_processing = any("procesando" in t.lower() or "aguardá" in t.lower() for t in captured_texts)
-            
-            # Exit loop once processing text disappears and we have captured data
-            if not is_processing and len(captured_texts) > 0:
-                break
-                
-            time.sleep(0.5)  # Check status every half a second
+        if self.is_card_reader_connected():
+            boton_consulta = app_window.Button4
+            boton_consulta.click_input()
+            logger.info("[*] Waiting for a response from the reader hardware...")
+
+        try:
+            captured_texts = self._wait_for_ui_data(app_window)
+            if captured_texts and self.is_card_scan_successful():
+                self.back()
+
+        except RetryError:
+            captured_texts = []
             
         logger.info(f"[debug] Captured Data after completion: {captured_texts}")
-        self.window.minimize()
-        
+
         if captured_texts:
+            self.window.minimize()
             return {
                 "status": "success",
                 "data": captured_texts
@@ -249,36 +321,23 @@ class SubeApp():
             self.window.maximize()
 
         app_window = self.window.connect()
-        botn_credit_balance = app_window.Button5
-        botn_credit_balance.click_input()
-        
-        logger.info("[*] Waiting for a response from the reader hardware...")
-        
-        timeout = 20  # Tiempo máximo de espera en segundos
-        start_time = time.time()
-        textos_capturados = []
-        
-        while time.time() - start_time < timeout:
-            # Capturamos todos los textos actuales de la ventana
-            text_element = app_window.descendants(control_type="Text")
-            textos_capturados = [el.window_text().strip() for el in text_element if el.window_text()]
-            
-            # Verificamos si la aplicación YA TERMINó de procesar.
-            # Condición de salida: que el texto "Procesando..." o "Aguardá" HAYA DESAPARECIDO,
-            # y que al menos tengamos datos o algún mensaje de resultado en pantalla.
-            sigue_procesando = any("procesando" in t.lower() or "aguardá" in t.lower() for t in textos_capturados)
-            
-            if not sigue_procesando and len(textos_capturados) > 0:
-                # ¡Terminó el proceso! Salimos del bucle de inmediato
-                break
-                
-            time.sleep(0.5)  # Revisa el estado cada medio segund
+        if self.is_card_reader_connected():
+            botn_credit_balance = app_window.Button5
+            botn_credit_balance.click_input()
+            logger.info("[*] Waiting for a response from the reader hardware...")
+
+        try:
+            textos_capturados = self._wait_for_ui_data(app_window)
+        except RetryError:
+            textos_capturados = []
+
         logger.info(f"[debug] Data: {textos_capturados}")
         # [debug] Data: ['Saldo anterior:', 'Importe cargado:', 'Saldo:', 'Importe pendiente:', '$1675,71', '$2000,00', '$3675,71', '$0,00']
-        
-        self.window.minimize()
+
         
         if textos_capturados:
+            time.sleep(2)
+            self.window.minimize()
             return {
                 "status": "success",
                 "data": textos_capturados
@@ -287,3 +346,52 @@ class SubeApp():
                 "status": "error",
                 "message": "No data captured from the interface."
             }
+
+    def restart(self) -> bool:
+        """
+        Closes the SUBE application if it is running and opens it again.
+        If it was already closed before calling this method, it simply starts it.
+        """
+        logger.info("[+] Initiating application restart...")
+
+        if self.status():
+            logger.info("[*] Closing the current application instance...")
+            self.close()
+            time.sleep(0.2)
+
+        logger.info("[*] Opening the application again...")
+        success = self.open()
+
+        if success:
+            logger.info("[+] Application successfully restarted.")
+        else:
+            logger.error("[!] Failed to restart the application properly.")
+
+        return success
+
+    def back(self) -> bool:
+        """
+        Returns to the previous screen by clicking the lowest button 
+        available on the current interface layout.
+        """
+
+        try:
+            app_window = self.window.connect(timeout=5)
+            
+            window_rect = app_window.rectangle()
+            y_threshold = window_rect.top + (window_rect.height() * 0.7)
+
+            for button in app_window.Custom.children(control_type="Button"):
+                coords = button.rectangle()
+                
+                if coords.top > y_threshold:
+                    button.click_input()
+                    return True
+                    
+            logger.warning("[!] 'Back' button not found in the lower section of the screen.")
+            return False
+            
+        except Exception as e:
+            logger.warning(f"[!] Error trying to navigate back: {e}")
+            return False
+ 

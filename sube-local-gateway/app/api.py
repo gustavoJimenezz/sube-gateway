@@ -101,7 +101,7 @@ class CreditBalanceResponse:
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
-import pdb; pdb.set_trace()
+
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
@@ -121,14 +121,17 @@ async def getstatus():
 @app.post("/open", response_model=AccionResponse, tags=["Ciclo de Vida"])
 async def open_application():
     """
-    Checks the application status and starts.
+    Ensures the SUBE application is open and ready for interaction.
     """
     try:
+        # if sube_controller.status():
+        #     return AccionResponse(status="success", message="Application is already open")
+
         success = sube_controller.open()
-        if success:
-            return AccionResponse(status="success", message="Application started successfully")
-        else:
-            return AccionResponse(status="error", message="Error starting the application")
+        if success and sube_controller.status():
+            return AccionResponse(status="success", message="Application started successfully and minimized")
+
+        return AccionResponse(status="error", message="Unable to start the application")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -143,10 +146,10 @@ async def close_application():
     """
     try:
         success = sube_controller.close()
-        if success:
+        if success  and not sube_controller.status():
             return AccionResponse(status="success", message="Application closed successfully")
-        else:
-            return AccionResponse(status="error", message="Application was not running or could not be closed")
+        
+        return AccionResponse(status="error", message="Application was not running or could not be closed")
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
@@ -252,3 +255,22 @@ def parse_credit_balance(s: str) -> Optional[float]:
         return float(s.replace("$", "").replace(".", "").replace(",", "."))
     except (ValueError, AttributeError):
         return None
+
+
+# -----------------------------------------------------------------------------
+# EndPoint POST /restart
+# -----------------------------------------------------------------------------
+@app.post("/restart", response_model=AccionResponse, tags=["Operaciones"])
+async def restart():
+    """
+    Navigates back in the SUBE application interface.
+    """
+    try:
+        success = sube_controller.restart()
+        if success:
+            return AccionResponse(status="success", message="Navigation back executed")
+
+        return AccionResponse(status="error", message="Could not navigate back")
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
