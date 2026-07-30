@@ -101,7 +101,7 @@ class CreditBalanceResponse:
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
-
+import pdb; pdb.set_trace()
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
@@ -255,7 +255,6 @@ def parse_credit_balance(s: str) -> Optional[float]:
         return float(s.replace("$", "").replace(".", "").replace(",", "."))
     except (ValueError, AttributeError):
         return None
-
 
 # -----------------------------------------------------------------------------
 # EndPoint POST /restart

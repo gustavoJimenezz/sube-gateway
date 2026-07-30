@@ -5,7 +5,7 @@ import subprocess
 import psutil
 import win32gui
 import win32con
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type, RetryError
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_result, retry_if_exception_type, RetryError, stop_after_delay
 from pywinauto import Application
 from pywinauto.win32functions import GetSystemMetrics
 from pathlib import Path
@@ -175,7 +175,37 @@ class SubeApp():
         self.window_title = window_title
         self.procces_name = process_name
         self.window = WindowSube(self.window_title)
-        # self._process = None
+
+    def _is_card_reader_connected(self):
+        patterns = [r"conect[aá] tu dispositivo"]
+        return not self.window.is_pattern_present_on_screen(patterns)
+
+    def _is_card_scan_successful(self):
+        """Check the interface to confirm whether the SUBE card was read successfully."""
+        success_patterns = [
+            r"consulta de saldo",
+            r"sube nro",
+            r"\d{4}\s\d{4}\s\d{4}\s\d{4}" 
+        ]
+        return self.window.is_pattern_present_on_screen(regex_patterns=success_patterns)
+
+    def _is_processing_transaction(self):
+        """It detects the transient loading screen when the application is communicating with the SUBE servers."""
+        processing_patterns = [
+            r"aguard(a|á) un instante",
+            r"procesando\.\.\."
+        ]
+        
+        return self.window.is_pattern_present_on_screen(regex_patterns=processing_patterns)
+
+    def _is_card_not_detected_error(self):
+        """It detects the error screen when no card is inserted or when a card is removed prematurely."""
+        error_patterns = [
+            r"no se detect(o|ó) ninguna tarjeta",
+            r"err:\s?0x9301"
+        ]
+        
+        return self.window.is_pattern_present_on_screen(regex_patterns=error_patterns)
 
     def status(self, max_atemps=5, pause=2) -> bool:
         """
@@ -249,65 +279,73 @@ class SubeApp():
         
         return self.status(self.procces_name) is False
     
+    # @retry(
+    #     stop=stop_after_attempt(180), 
+    #     wait=wait_fixed(0.5),
+    #     retry=retry_if_result(lambda result: result is None),
+    #     reraise=True,
+    # )
+    # def _wait_for_ui_data(self, app_window):
+    #     """Polls the UI once and returns the captured text once processing finishes."""
+    #     text_elements = app_window.descendants(control_type="Text")
+    #     captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
+    #     is_processing = any("procesando" in t.lower() or "aguardá" in t.lower() for t in captured_texts)
+
+    #     if not is_processing and captured_texts:
+    #         return captured_texts
+    #     return None
+
     @retry(
-        stop=stop_after_attempt(20),
+        stop=stop_after_delay(180),
         wait=wait_fixed(0.5),
         retry=retry_if_result(lambda result: result is None),
         reraise=True,
     )
     def _wait_for_ui_data(self, app_window):
         """Polls the UI once and returns the captured text once processing finishes."""
+        # 1. Volcamos los elementos de texto primero
         text_elements = app_window.descendants(control_type="Text")
         captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
-        is_processing = any("procesando" in t.lower() or "aguardá" in t.lower() for t in captured_texts)
 
-        if not is_processing and captured_texts:
+        if captured_texts and self._is_processing_transaction():
+            return None
+
+        if captured_texts:
             return captured_texts
+            
         return None
-
-    def is_card_reader_connected(self):
-        patterns = [r"conect[aá] tu dispositivo"]
-        return not self.window.is_pattern_present_on_screen(patterns)
-
-    def is_card_scan_successful(self):
-        """Check the interface to confirm whether the SUBE card was read successfully."""
-        success_patterns = [
-            r"consulta de saldo",
-            r"sube nro",
-            r"\d{4}\s\d{4}\s\d{4}\s\d{4}" 
-        ]
-        return self.window.is_pattern_present_on_screen(regex_patterns=success_patterns)
 
     def scan_card(self) -> dict:
         """
         Interact with the interface, press “Consultar saldo”
         and wait dynamically for the hardware to finish reading.
         """
-        if self.window.is_minimized():
+        if self.status():
             self.window.maximize()
 
-        app_window = self.window.connect()
-        if self.is_card_reader_connected():
-            boton_consulta = app_window.Button4
-            boton_consulta.click_input()
-            logger.info("[*] Waiting for a response from the reader hardware...")
+            app_window = self.window.connect()
+            if self._is_card_reader_connected():
+                boton_consulta = app_window.Button4
+                boton_consulta.click_input()
+                logger.info("[*] Waiting for a response from the reader hardware...")
 
-        try:
-            captured_texts = self._wait_for_ui_data(app_window)
-            if captured_texts and self.is_card_scan_successful():
-                self.back()
+            try:
+                captured_texts = self._wait_for_ui_data(app_window)
+                if captured_texts and self._is_card_scan_successful():
+                    self.back()
 
-        except RetryError:
-            captured_texts = []
-            
-        logger.info(f"[debug] Captured Data after completion: {captured_texts}")
+            except RetryError as e:
+                logger.error(f"[!] Error : {e}")
+                captured_texts = []
+                
+            logger.info(f"[debug] Captured Data after completion: {captured_texts}")
 
-        if captured_texts:
-            self.window.minimize()
-            return {
-                "status": "success",
-                "data": captured_texts
-            }
+            if captured_texts:
+                self.window.minimize()
+                return {
+                    "status": "success",
+                    "data": captured_texts
+                }
         return {
             "status": "error",
             "message": "No data captured from the interface."
@@ -317,31 +355,32 @@ class SubeApp():
         """
         Interact with the interface, press “Acreditar”
         """
-        if self.window.is_minimized():
+        if self.status():
             self.window.maximize()
 
-        app_window = self.window.connect()
-        if self.is_card_reader_connected():
-            botn_credit_balance = app_window.Button5
-            botn_credit_balance.click_input()
-            logger.info("[*] Waiting for a response from the reader hardware...")
+            app_window = self.window.connect()
+            if self._is_card_reader_connected():
+                botn_credit_balance = app_window.Button5
+                botn_credit_balance.click_input()
+                logger.info("[*] Waiting for a response from the reader hardware...")
 
-        try:
-            textos_capturados = self._wait_for_ui_data(app_window)
-        except RetryError:
-            textos_capturados = []
+            try:
+                textos_capturados = self._wait_for_ui_data(app_window)
+                logger.info(f"[debug] textos_capturados: {textos_capturados}")
+                if textos_capturados and self._is_card_not_detected_error():
+                    self.back()
 
-        logger.info(f"[debug] Data: {textos_capturados}")
-        # [debug] Data: ['Saldo anterior:', 'Importe cargado:', 'Saldo:', 'Importe pendiente:', '$1675,71', '$2000,00', '$3675,71', '$0,00']
+            except RetryError as e:
+                logger.error(f"[!] Error : {e}")
+                textos_capturados = []
 
-        
-        if textos_capturados:
-            time.sleep(2)
-            self.window.minimize()
-            return {
-                "status": "success",
-                "data": textos_capturados
-            }
+            logger.info(f"[debug] Data: {textos_capturados}")
+            if textos_capturados:
+                self.window.minimize()
+                return {
+                    "status": "success",
+                    "data": textos_capturados
+                }
         return {
                 "status": "error",
                 "message": "No data captured from the interface."
