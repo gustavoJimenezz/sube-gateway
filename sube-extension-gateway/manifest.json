@@ -15,19 +15,19 @@
     {
       "matches": ["https://traxion.telerecargas.com.ar/*"],
       "js": ["dist/content.js"],
-      "css": ["dist/styles.css"],
+      "css": ["src/public/styles.css"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["dist/icon-sube.jpg"],
+      "resources": ["src/public/icon-sube.jpg"],
       "matches": ["https://traxion.telerecargas.com.ar/*"]
     }
   ],
   "icons": {
-    "16": "dist/icon16.png",
-    "48": "dist/icon48.png",
-    "128": "dist/icon128.png"
+    "16": "src/public/icon16.png",
+    "48": "src/public/icon48.png",
+    "128": "src/public/icon128.png"
   }
 }

@@ -1,6 +1,7 @@
 // vite.config.js
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import { viteStaticCopy } from 'vite-plugin-static-copy';
 
 export default defineConfig({
   build: {
@@ -20,4 +21,14 @@ export default defineConfig({
   server: {
     port: 3000,
   },
+  plugins: [
+    viteStaticCopy({
+      targets: [
+        {
+          src: 'src/public/*.*',
+          dest: '.',
+        }
+      ]
+    })
+  ]
 });

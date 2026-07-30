@@ -57,7 +57,8 @@ const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150">
 </svg>`;
 
 // const imageUrl = chrome.runtime.getURL('icon-sube.jpg');
-const imageUrl = chrome.runtime.getURL("dist/icon-sube.jpg");
+// const imageUrl = chrome.runtime.getURL("dist/icon-sube.jpg");
+const imageUrl = chrome.runtime.getURL("src/public/icon-sube.jpg");
 const html = `
     <div id="sube-bar">
         
