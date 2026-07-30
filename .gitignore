@@ -12,3 +12,7 @@ sube-local-gateway/sube-local-gateway.spec
 sube-extension-gateway/dist/
 sube-extension-gateway/node_modules/
 sube-extension-gateway/package-lock.json
+
+**/__pycache__/
+*.pyc
+**/*.log
