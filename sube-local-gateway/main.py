@@ -1,6 +1,6 @@
 import uvicorn
 import logging
-from app.api import app
+from app.api.route import app
 from app.logger_config import setup_logger
 logger = setup_logger(__name__)
 
