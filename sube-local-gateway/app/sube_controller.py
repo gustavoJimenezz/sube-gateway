@@ -279,22 +279,6 @@ class SubeApp():
         
         return self.status(self.procces_name) is False
     
-    # @retry(
-    #     stop=stop_after_attempt(180), 
-    #     wait=wait_fixed(0.5),
-    #     retry=retry_if_result(lambda result: result is None),
-    #     reraise=True,
-    # )
-    # def _wait_for_ui_data(self, app_window):
-    #     """Polls the UI once and returns the captured text once processing finishes."""
-    #     text_elements = app_window.descendants(control_type="Text")
-    #     captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
-    #     is_processing = any("procesando" in t.lower() or "aguardá" in t.lower() for t in captured_texts)
-
-    #     if not is_processing and captured_texts:
-    #         return captured_texts
-    #     return None
-
     @retry(
         stop=stop_after_delay(180),
         wait=wait_fixed(0.5),

@@ -101,7 +101,7 @@ class CreditBalanceResponse:
 
 # Instancia Sube 
 sube_controller = SubeApp(exe_path=EXE_PATH, window_title=WINDOW_TITLE, process_name=PROCESS_NAME)
-import pdb; pdb.set_trace()
+
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
