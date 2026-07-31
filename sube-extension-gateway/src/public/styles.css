@@ -132,6 +132,8 @@
     background: #00B0FF !important;
     color: white !important;
     border: 1px solid transparent !important;
+    animation: pulse 1s infinite !important;
+
 }
 
 .sube-btn.estado-acreditando {
@@ -193,33 +195,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-/* #sube-output .value.success {
-    color: #E8F5E9;
-}
-
-#sube-output .value.error {
-    color: #FFCDD2;
-}
-
-#sube-output .value.info {
-    color: #E1F5FE;
-} */
-
-#sube-output .value.success {
-    background-color: #16A34A;
-    color: #FFF;
-}
-
-#sube-output .value.error {
-    background-color: #DC2626;
-    color: #FFF;
-}
-
-#sube-output .value.info {
-    background-color: #EA580C;
-    color: #FFF;
 }
 
 /* Ajuste página */

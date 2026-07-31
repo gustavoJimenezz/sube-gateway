@@ -121,14 +121,15 @@ class CreditBalanceResponse:
 @app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
 async def get_status(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Returns a JSON object indicating whether the SUBE application is running.
+    Returns the current state of the SUBE application.
     """
     try:
-        is_running = bool(sube.status())
-        return {"is_open": is_running}
+        is_running = sube.status()
+        return {"status": "open" if is_running else "closed"}
+
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al verificar el estado de la app: {str(e)}"
         )
 

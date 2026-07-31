@@ -2,8 +2,6 @@ const API_BASE = 'http://127.0.0.1:8000';
 
 export async function getStatus() {
   const response = await fetch(`${API_BASE}/status`);
-  console.log("Respuesta")
-  console.log(response)
   return response;
 }
 

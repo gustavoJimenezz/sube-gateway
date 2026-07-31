@@ -1,7 +1,7 @@
 // content/index.js
 import { html } from './ui/bar.js';
 import { setupEventHandlers } from './handlers/events.js';
-import { loadInitialState } from './state/store.js';
+// import { loadInitialState } from './state/store.js';
 
 // ===== CONTROLADOR DE INYECCIÓN DINÁMICA =====
 function checkAndInjectBar() {
@@ -36,11 +36,7 @@ async function initApp() {
         console.warn('Botón Abrir no encontrado, la barra no se inicializó correctamente');
         return;
     }
-
-    // Cargar estado desde chrome.storage
-    await loadInitialState();
-
-    // Configurar event handlers
+    
     setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay);
 
     console.log('SUBE App inicializada correctamente');

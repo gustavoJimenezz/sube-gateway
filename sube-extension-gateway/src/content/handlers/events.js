@@ -1,13 +1,16 @@
 // content/handlers/events.js
 import { getStatus, openApp, readCard, creditBalance, closeApp } from '../api/client.js';
-import { getAppState } from '../state/store.js';
+// import { getAppState } from '../state/store.js';
+
 
 export async function isAppOpen() {
     try {
         const res = await getStatus();
         const data = await res.json();
-        return data.is_open === true;
-    } catch {
+
+        return data.status === "open";
+    } catch (err) {
+        console.error(err);
         return false;
     }
 }
@@ -35,9 +38,10 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         });
     }
 
+    setButtonsEnabled(isAppOpen())
+
     btnAbrir.addEventListener('click', async function () {
         const appEstaAbierta = await isAppOpen();
-
         if (!appEstaAbierta) {
             setButtonState(this, 'estado-abriendo', 'Abriendo...');
             setResult('Iniciando programa', 'info');
@@ -83,14 +87,13 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         const appEstaAbierta = await isAppOpen();
         if (!appEstaAbierta) return;
 
-        setButtonState(this, 'estado-consultando', 'Consultando...');
+        setButtonState(this, 'estado-consultando', 'Consultando ..');
         setResult('Escaneando tarjeta SUBE...', 'info');
         btnAbrir.disabled = true;
         btnAcreditar.disabled = true;
 
         try {
             const data = await readCard();
-            console.log("esta es la data " + data)
             if (data.status === 'success') {
                 setButtonState(this, 'estado-inicial', `ID: ${data.card_number.slice(0, 4)}...`);
                 setResult(`ID: ${data.card_number} | Saldo: $${data.balance}`, 'success');
@@ -121,7 +124,7 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
 
     // Evento Acreditar
     btnAcreditar.addEventListener('click', async function () {
-        if (!getAppState()) return;
+        // if (!getAppState()) return;
 
         setButtonState(this, 'estado-acreditando', 'Acreditando...');
         setResult('Procesando acreditación...', 'info');
