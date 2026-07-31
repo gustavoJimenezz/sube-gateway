@@ -46,8 +46,11 @@ def get_sube_controller() -> SubeApp:
         window_title=WINDOW_TITLE, 
         process_name=PROCESS_NAME
     )
-# app= get_sube_controller()
-# app.scan_card()
+# app_sube= get_sube_controller()
+# app_sube.open()
+# app_sube.scan_card()
+# # import pdb;pdb.set_trace()
+# app_sube.close()
 # -----------------------------------------------------------------------------
 # Response Classes
 # -----------------------------------------------------------------------------

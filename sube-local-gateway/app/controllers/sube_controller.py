@@ -23,35 +23,7 @@ class SubeApp:
         self.window_title = window_title
         self.procces_name = process_name
         self.window = WindowSube(self.window_title)
-
-    def _is_card_reader_connected(self):
-        patterns = [r"conect[aá] tu dispositivo"]
-        return not self.window.is_pattern_present_on_screen(patterns)
-
-    def _is_card_scan_successful(self):
-        """Check the interface to confirm whether the SUBE card was read successfully."""
-        success_patterns = [
-            r"consulta de saldo",
-            r"sube nro",
-            r"\d{4}\s\d{4}\s\d{4}\s\d{4}" 
-        ]
-        return self.window.is_pattern_present_on_screen(regex_patterns=success_patterns)
-
-    def _is_processing_transaction(self):
-        """It detects the transient loading screen."""
-        processing_patterns = [
-            r"aguard(a|á) un instante",
-            r"procesando\.\.\."
-        ]
-        return self.window.is_pattern_present_on_screen(regex_patterns=processing_patterns)
-
-    def _is_card_not_detected_error(self):
-        """It detects the error screen when no card is inserted."""
-        error_patterns = [
-            r"no se detect(o|ó) ninguna tarjeta",
-            r"err:\s?0x9301"
-        ]
-        return self.window.is_pattern_present_on_screen(regex_patterns=error_patterns)
+        self._current_window = None
 
     def status(self) -> bool:
         """Checks if the SUBE application is currently running."""
@@ -85,6 +57,7 @@ class SubeApp:
         try:
             if not self.status():
                 if self._start_process():
+                    self._current_window = self.window.connect()
                     self.window.move_to_right()
                     self.window.minimize()
     
@@ -99,15 +72,13 @@ class SubeApp:
         logger.info("[-] Stopping application...")
         try:
             if self.status():
-                logger.info("[*] Attempting to close via UI...")
-                app_window = self.window.connect(timeout=5)
+                logger.info("[*] Attempting to close...")
+                app_window = self._current_window
                 if app_window:
                     app_window.close()
                     logger.info("[+] Process stopped successfully.")
-                time.sleep(1.5)
         except Exception as e:
-            logger.warning(f"[!] UI interaction finished or skipped: {e}")
-        
+            logger.warning(f"[!] UI interaction finished or skipped: {e}")   
         return self.status() is False
 
     @retry(
@@ -120,14 +91,11 @@ class SubeApp:
         """Polls the UI once and returns the captured text once processing finishes."""
         text_elements = app_window.descendants(control_type="Text")
         captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
-
         if not captured_texts:
             return None
-
-        # 1. Creamos un solo string con lo que capturamos en ESTE instante exacto
+        
         full_ui_text = " ".join(captured_texts)
         
-        # 2. Reutilizamos tus patrones de procesamiento directamente sobre este string
         processing_patterns = [
             r"aguard(a|á) un instante",
             r"procesando\.\.\."
@@ -138,76 +106,55 @@ class SubeApp:
             for pattern in processing_patterns
         )
 
-        # 3. Si detectamos que está procesando en base a los textos capturados, reintentamos
         if is_processing:
             logger.info("[*] UI is still processing transaction... retrying.")
             return None
-
-        # 4. Si hay textos y no tiene patrones de carga, significa que es la pantalla de saldo real
         return captured_texts
-    
-    # @retry(
-    #     stop=stop_after_delay(180),
-    #     wait=wait_fixed(0.5),
-    #     retry=retry_if_result(lambda result: result is None),
-    #     reraise=True,
-    # )
-    # def _wait_for_ui_data(self, app_window):
-    #     """Polls the UI once and returns the captured text once processing finishes."""
-    #     text_elements = app_window.descendants(control_type="Text")
-    #     captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
-
-    #     if captured_texts and self._is_processing_transaction():
-    #         return None
-
-    #     if captured_texts:
-    #         return captured_texts
-    #     return None
+    import time # Asegúrate de importarlo
 
     def scan_card(self) -> dict:
         """Interact with the interface and press “Consultar saldo”."""
-        # 1. Validación de estado general de la app
         if not self.status():
             return {"status": "error", "message": "Application interface is not active or ready."}
-            
+        
         try:
+            if not getattr(self, '_current_window', None):
+                logger.info("[*] Window reference lost or None. Reconnecting...")
+                self._current_window = self.window.connect()
+
             self.window.maximize()
-            
-            # 2. Validación de hardware y menú
-            if not self._is_card_reader_connected():
+            time.sleep(1)
+
+            app_window = self._current_window
+            if app_window is None:
+                return {"status": "error", "message": "Could not attach to the application window."}
+
+            if not self.window.is_card_reader_connected(app_window):
                 return {"status": "error", "message": "Card reader hardware is not connected."}
                 
-            if not self.window.is_main_menu_visible():
+            if not self.window.is_main_menu_visible(app_window):
                 return {"status": "error", "message": "Application is not in the main menu."}
 
-            # 3. Interacción con la UI
-            app_window = self.window.connect()
             boton_consulta = app_window.Button4
             boton_consulta.click_input()
             logger.info("[*] Waiting for a response from the reader hardware...")
 
             captured_texts = []
-            
-            # 4. Captura robusta de datos con manejo de excepciones amplio
             try:
                 captured_texts = self._wait_for_ui_data(app_window)
 
-                # Si tenemos textos y el estado es exitoso, volvemos atrás
                 if captured_texts:
-                    self.back()
+                    self.back(app_window)
                 else:
                     logger.warning("[!] Data captured but internal scan success validation failed.")
-                    # Decide si quieres forzar self.back() aquí también para resetear la UI
-                    self.back() 
+                    self.back(app_window) 
                     
             except Exception as ui_error: 
-                # Captura RetryError y cualquier error de automatización de UI
                 logger.error(f"[!] UI Interaction Error: {ui_error}")
                 captured_texts = []
 
             logger.info(f"[debug] Captured Data after completion: {captured_texts}")
 
-            # 5. Retorno final basado en el resultado real
             if captured_texts:
                 self.window.minimize()
                 return {"status": "success", "data": captured_texts}
@@ -218,38 +165,12 @@ class SubeApp:
             logger.critical(f"[CRITICAL] Unexpected crash in scan_card: {general_error}")
             return {"status": "error", "message": f"Unexpected fatal error: {str(general_error)}"}
 
-    # def scan_card(self) -> dict:
-    #     """Interact with the interface and press “Consultar saldo”."""
-    #     if self.status():
-    #         self.window.maximize()
-    #         app_window = self.window.connect()
-            
-    #         if self._is_card_reader_connected() and self.window.is_main_menu_visible():
-    #             boton_consulta = app_window.Button4
-    #             boton_consulta.click_input()
-    #             logger.info("[*] Waiting for a response from the reader hardware...")
-
-    #             try:
-    #                 captured_texts = self._wait_for_ui_data(app_window)
-    #                 if captured_texts and self._is_card_scan_successful():
-    #                     self.back()
-    #             except RetryError as e:
-    #                 logger.error(f"[!] Error : {e}")
-    #                 captured_texts = []
-                    
-    #             logger.info(f"[debug] Captured Data after completion: {captured_texts}")
-
-    #             if captured_texts:
-    #                 self.window.minimize()
-    #                 return {"status": "success", "data": captured_texts}
-    #     return {"status": "error", "message": "No data captured from the interface."}
-
     def credit_balance(self) -> dict:
         """Interact with the interface and press “Acreditar”."""
         if self.status():
             self.window.maximize()
-            app_window = self.window.connect()
-            if self._is_card_reader_connected():
+            app_window = self._current_window
+            if self.is_card_reader_connected(self._current_window):
                 botn_credit_balance = app_window.Button5
                 botn_credit_balance.click_input()
                 logger.info("[*] Waiting for a response from the reader hardware...")
@@ -291,50 +212,29 @@ class SubeApp:
         retry=retry_if_result(_menu_not_visible),
         retry_error_callback=_return_false_on_failure  # <-- Esto intercepta el error y devuelve False
     )
-    def back(self) -> bool:
+    def back(self, window) -> bool:
         """Returns to the previous screen by clicking the lowest button.
         Guaranteed to return ONLY True (success) or False (failed after all retries).
         """
-        if self.window.is_main_menu_visible():
+        if self.window.is_main_menu_visible(window):
             logger.info("[*] Successfully in main menu.")
             return True
             
         try:
-            app_window = self.window.connect(timeout=5)
-            window_rect = app_window.rectangle()
+            window_rect = window.rectangle()
             y_threshold = window_rect.top + (window_rect.height() * 0.7)
 
-            for button in app_window.Custom.children(control_type="Button"):
+            for button in window.Custom.children(control_type="Button"):
                 coords = button.rectangle()
                 if coords.top > y_threshold:
                     button.click_input()
                     logger.info("[*] 'Back' button clicked. Verifying state...")
                     
                     time.sleep(0.5) 
-                    return self.window.is_main_menu_visible()
+                    return self.window.is_main_menu_visible(window)
                     
             logger.warning("[!] 'Back' button not found in the lower section.")
             return False
-            
         except Exception as e:
             logger.warning(f"[!] Error trying to navigate back: {e}")
             return False
-    
-    # def back(self) -> bool:
-    #     """Returns to the previous screen by clicking the lowest button."""
-    #     try:
-    #         app_window = self.window.connect(timeout=5)
-    #         window_rect = app_window.rectangle()
-    #         y_threshold = window_rect.top + (window_rect.height() * 0.7)
-
-    #         for button in app_window.Custom.children(control_type="Button"):
-    #             coords = button.rectangle()
-    #             if coords.top > y_threshold:
-    #                 button.click_input()
-    #                 return True
-                    
-    #         logger.warning("[!] 'Back' button not found in the lower section.")
-    #         return False
-    #     except Exception as e:
-    #         logger.warning(f"[!] Error trying to navigate back: {e}")
-    #         return False

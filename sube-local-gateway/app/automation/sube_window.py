@@ -52,16 +52,9 @@ class WindowSube(WindowController):
     def move_to_right(self):
         return self.reposition_to_right(self.title_pattern)
 
-    def is_pattern_present_on_screen(self, regex_patterns):
-        """Scans the UI once using the window handle and returns True if any match."""
-        hwnd = self.get_window_handle(self.title_pattern)
-        if not hwnd:
-            return False
-
-        app = Application(backend="uia").connect(handle=hwnd)
-        actual_window = app.window(handle=hwnd)
-
-        text_elements = actual_window.descendants(control_type="Text")
+    def is_pattern_present_on_screen(self, app_window, regex_patterns):
+        """Scans the already connected UI window and returns True if any match."""
+        text_elements = app_window.descendants(control_type="Text")
         captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
 
         full_ui_text = " ".join(captured_texts)
@@ -70,17 +63,38 @@ class WindowSube(WindowController):
                 return True
         return False
 
-    def is_main_menu_visible(self):
-        hwnd = self.get_window_handle(self.title_pattern)
-
-        if not hwnd:
-            return False
-
-        app = Application(backend="uia").connect(handle=hwnd)
-        window = app.window(handle=hwnd)
-
+    def is_main_menu_visible(self, app_window):
         menu_buttons = [
-            btn for btn in window.descendants(control_type="Button") if btn.element_info.name not in ("Minimizar", "Maximizar", "Cerrar")
+            btn for btn in app_window.descendants(control_type="Button") if btn.element_info.name not in ("Minimizar", "Maximizar", "Cerrar")
         ]
         
         return len(menu_buttons) == 6
+
+    def is_card_reader_connected(self, app_window):
+        patterns = [r"conect[aá] tu dispositivo"]
+        return not self.is_pattern_present_on_screen(app_window, patterns)
+    
+    def is_card_not_detected_error(self):
+        """It detects the error screen when no card is inserted."""
+        error_patterns = [
+            r"no se detect(o|ó) ninguna tarjeta",
+            r"err:\s?0x9301"
+        ]
+        return self.is_pattern_present_on_screen(regex_patterns=error_patterns)
+
+    def is_card_scan_successful(self):
+        """Check the interface to confirm whether the SUBE card was read successfully."""
+        success_patterns = [
+            r"consulta de saldo",
+            r"sube nro",
+            r"\d{4}\s\d{4}\s\d{4}\s\d{4}" 
+        ]
+        return self.is_pattern_present_on_screen(regex_patterns=success_patterns)
+
+    def is_processing_transaction(self):
+        """It detects the transient loading screen."""
+        processing_patterns = [
+            r"aguard(a|á) un instante",
+            r"procesando\.\.\."
+        ]
+        return self.is_pattern_present_on_screen(regex_patterns=processing_patterns)
