@@ -1,7 +1,16 @@
-// content/handlers/events.js
 import { getStatus, openApp, readCard, creditBalance, closeApp } from '../api/client.js';
-// import { getAppState } from '../state/store.js';
 
+function setButtonState(btn, state, text) {
+    if (!btn) return;
+    btn.className = 'sube-btn ' + state;
+    btn.textContent = text;
+}
+
+function setButtonsEnabled(enabled, secondaryButtons) {
+    secondaryButtons.forEach(btn => {
+        if (btn) btn.disabled = !enabled;
+    });
+}
 
 export async function isAppOpen() {
     try {
@@ -15,6 +24,18 @@ export async function isAppOpen() {
     }
 }
 
+export function initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir){
+        secondaryButtons = [btnConsultar, btnAcreditar]
+        if (isOpen) {
+            setButtonState(btnAbrir, 'estado-cerrado', 'Cerrar programa');
+            setButtonsEnabled(true, secondaryButtons);
+
+        } else {
+            setButtonState(btnAbrir, 'estado-inicial', 'Abrir App');
+            setButtonsEnabled(false, secondaryButtons);
+        }
+}
+
 export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay) {
     if (!btnAbrir) return;
 
@@ -25,20 +46,6 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         resultDisplay.textContent = text;
         resultDisplay.className = 'value ' + type;
     }
-
-    function setButtonState(btn, state, text) {
-        if (!btn) return;
-        btn.className = 'sube-btn ' + state;
-        btn.textContent = text;
-    }
-
-    function setButtonsEnabled(enabled) {
-        secondaryButtons.forEach(btn => {
-            if (btn) btn.disabled = !enabled;
-        });
-    }
-
-    setButtonsEnabled(isAppOpen())
 
     btnAbrir.addEventListener('click', async function () {
         const appEstaAbierta = await isAppOpen();
@@ -52,14 +59,14 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
                 if (responseOpen.ok) {
                     setButtonState(this, 'estado-cerrado', 'Cerrar programa');
                     setResult('App SUBE abierta', 'success');
-                    setButtonsEnabled(true);
+                    setButtonsEnabled(true, secondaryButtons);
                 }
 
             } catch (error) {
                 console.error('Error al ejecutar /open:', error);
                 setButtonState(this, 'estado-inicial', 'Abrir App');
                 setResult('No se pudo abrir la app local', 'error');
-                setButtonsEnabled(false);
+                setButtonsEnabled(false, secondaryButtons);
             }
         } else {
             setButtonState(this, 'estado-cerrando', 'Cerrando...');
@@ -71,14 +78,14 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
                 if (responseClose.ok) {
                     setButtonState(this, 'estado-inicial', 'Abrir App');
                     setResult('App SUBE cerrada', 'success');
-                    setButtonsEnabled(false);
+                    setButtonsEnabled(false, secondaryButtons);
                 }
 
             } catch (error) {
                 console.error('Error al ejecutar /close:', error);
                 setButtonState(this, 'estado-cerrado', 'Cerrar programa');
                 setResult('No se pudo cerrar la app local', 'error');
-                setButtonsEnabled(true);
+                setButtonsEnabled(true, secondaryButtons);
             }
         }
     });

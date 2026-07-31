@@ -74,7 +74,7 @@ const html = `
         </div>
         <div class="sube-section-right">
             <div id="sube-output">
-                <span class="value info" id="sube-result">Verificando estado...</span>
+                <span class="value info" id="sube-result"></span>
             </div>
         </div>
     </div>

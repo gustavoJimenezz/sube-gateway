@@ -1,6 +1,6 @@
 // content/index.js
 import { html } from './ui/bar.js';
-import { setupEventHandlers } from './handlers/events.js';
+import { setupEventHandlers, isAppOpen, initialButtonsSet } from './handlers/events.js';
 // import { loadInitialState } from './state/store.js';
 
 // ===== CONTROLADOR DE INYECCIÓN DINÁMICA =====
@@ -37,8 +37,9 @@ async function initApp() {
         return;
     }
     
+    const isOpen = await isAppOpen();
+    initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir);
     setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay);
-
     console.log('SUBE App inicializada correctamente');
 }
 
