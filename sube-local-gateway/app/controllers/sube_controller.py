@@ -110,7 +110,6 @@ class SubeApp:
             logger.info("[*] UI is still processing transaction... retrying.")
             return None
         return captured_texts
-    import time # Asegúrate de importarlo
 
     def scan_card(self) -> dict:
         """Interact with the interface and press “Consultar saldo”."""
@@ -167,28 +166,55 @@ class SubeApp:
 
     def credit_balance(self) -> dict:
         """Interact with the interface and press “Acreditar”."""
-        if self.status():
-            self.window.maximize()
-            app_window = self._current_window
-            if self.is_card_reader_connected(self._current_window):
-                botn_credit_balance = app_window.Button5
-                botn_credit_balance.click_input()
-                logger.info("[*] Waiting for a response from the reader hardware...")
+        if not self.status():
+            return {"status": "error", "message": "Application interface is not active or ready."}
+        
+        try:
+            if not getattr(self, '_current_window', None):
+                logger.info("[*] Window reference lost or None in credit. Reconnecting...")
+                self._current_window = self.window.connect()
 
+            self.window.maximize()
+            time.sleep(1)
+            
+            app_window = self._current_window
+            if app_window is None:
+                return {"status": "error", "message": "Could not attach to the application window."}
+
+            if not self.window.is_card_reader_connected(app_window):
+                return {"status": "error", "message": "Card reader hardware is not connected."}
+
+            botn_credit_balance = app_window.Button5
+            botn_credit_balance.click_input()
+            logger.info("[*] Waiting for a response from the reader hardware...")
+
+            textos_capturados = []
+            
             try:
                 textos_capturados = self._wait_for_ui_data(app_window)
                 logger.info(f"[debug] textos_capturados: {textos_capturados}")
-                if textos_capturados and self._is_card_not_detected_error():
-                    self.back()
-            except RetryError as e:
-                logger.error(f"[!] Error : {e}")
+                
+                if textos_capturados:
+                    self.back(app_window)
+                else:
+                    logger.warning("[!] No data captured during credit routine.")
+                    self.back(app_window)
+
+            except Exception as ui_error: 
+                logger.error(f"[!] UI Interaction Error during credit: {ui_error}")
                 textos_capturados = []
 
             logger.info(f"[debug] Data: {textos_capturados}")
+            
             if textos_capturados:
                 self.window.minimize()
                 return {"status": "success", "data": textos_capturados}
-        return {"status": "error", "message": "No data captured from the interface."}
+                
+            return {"status": "error", "message": "No data captured from the interface."}
+
+        except Exception as general_error:
+            logger.critical(f"[CRITICAL] Unexpected crash in credit_balance: {general_error}")
+            return {"status": "error", "message": f"Unexpected fatal error: {str(general_error)}"}
 
     def restart(self) -> bool:
         """Closes the SUBE application if it is running and opens it again."""
