@@ -1,12 +1,13 @@
-import re
 import json
 from dataclasses import dataclass, asdict
-from typing import Literal, Optional
+from typing import Literal
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
 from pathlib import Path
 from app.controllers.sube_controller import SubeApp
+from app.logger_config import setup_logger
+
+logger = setup_logger(__name__)
 
 # -----------------------------------------------------------------------------
 # Init app
@@ -39,13 +40,20 @@ app.add_middleware(
 # -----------------------------------------------------------------------------
 # Init SubeApp instance
 # -----------------------------------------------------------------------------
+_sube_instance = None
+
 def get_sube_controller() -> SubeApp:
-    """Provide the SubeApp instance."""
-    return SubeApp(
-        exe_path=EXE_PATH, 
-        window_title=WINDOW_TITLE, 
-        process_name=PROCESS_NAME
-    )
+    """Provide a single, persistent SubeApp instance (Singleton)."""
+    global _sube_instance
+    
+    if _sube_instance is None:
+        logger.info("[*] Creating unique SubeApp controller instance...")
+        _sube_instance = SubeApp(
+            exe_path=EXE_PATH, 
+            window_title=WINDOW_TITLE, 
+            process_name=PROCESS_NAME
+        )
+    return _sube_instance
 
 # -----------------------------------------------------------------------------
 # Response Classes
@@ -66,7 +74,7 @@ class StatusResponse:
 class AccionResponse:
     """Result of the action, either success or error."""
     status: Literal["success", "error"]
-    message: Optional[str] = None
+    message: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -82,9 +90,8 @@ class ReadCardResponse:
     status: Result of the operation: 'success' if read correctly, 'error' otherwise.
     """
     status: Literal["success", "error"]
-    card_number: Optional[str] = None
-    balance: Optional[float] = None
-    message: Optional[str] = None
+    data: list[str] | None = None
+    message: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -96,15 +103,11 @@ class ReadCardResponse:
 @dataclass
 class CreditBalanceResponse:
     """Response when attempting to credit balance on a SUBE card.
-
     status: Result of the operation: 'success' if credited correctly, 'error' otherwise.
     """
     status: Literal["success", "error"]
-    previous_balance: Optional[float] = None
-    amount_loaded: Optional[float] = None
-    new_balance: Optional[float] = None
-    pending_amount: Optional[float] = None
-    message: Optional[str] = None
+    data: list[str] | None = None
+    message: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -112,11 +115,10 @@ class CreditBalanceResponse:
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
-
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
-@app.get("/status", tags=["Monitoring"])
+@app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
 async def get_status(sube: SubeApp = Depends(get_sube_controller)):
     """
     Returns a JSON object indicating whether the SUBE application is running.
@@ -134,159 +136,133 @@ async def get_status(sube: SubeApp = Depends(get_sube_controller)):
 # EndPoint POST /open
 # -----------------------------------------------------------------------------
 @app.post("/open", response_model=AccionResponse, tags=["Ciclo de Vida"])
-async def open_application(sube: SubeApp=Depends(get_sube_controller)):
+async def open_application(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Ensures the SUBE application is open and ready for interaction.
+    Ensures the SUBE application process is running and initialized.
     """
     try:
-        # if sube_controller.status():
-        #     return AccionResponse(status="success", message="Application is already open")
+        process_active = sube.open()
+        
+        if process_active:
+            return {"status":"success", 
+                    "message":"Application process verified active."}
+            
 
-        success = sube.open()
-        if success and sube.status():
-            return AccionResponse(status="success", message="Application started successfully and minimized")
-
-        return AccionResponse(status="error", message="Unable to start the application")
+        return {"status":"error", 
+                "message":"Unable to verify or start the application process."}
+        
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        logger.error(f"[CRITICAL] API crash in /open endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error during application opening: {str(e)}"
+        )
 
 # -----------------------------------------------------------------------------
 # EndPoint POST /close
 # -----------------------------------------------------------------------------
-
 @app.post("/close", response_model=AccionResponse, tags=["Ciclo de Vida"])
-async def close_application(sube: SubeApp=Depends(get_sube_controller)):
+async def close_application(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Checks the application status and closes it.
+    Terminates the application process and cleans up resources.
     """
     try:
-        success = sube.close()
-        if success  and not sube.status():
-            return AccionResponse(status="success", message="Application closed successfully")
+        is_closed = sube.close()
+        if is_closed:
+            return {"status":"success", 
+                    "message":"Application closed successfully and process terminated."}
         
-        return AccionResponse(status="error", message="Application was not running or could not be closed")
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        return {"status":"error", 
+                "message":"Application was not running or could not be terminated."}
 
+    except Exception as e:
+        logger.error(f"[CRITICAL] API crash in /close endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error during application closure: {str(e)}"
+        )
 
 # -----------------------------------------------------------------------------
 # EndPoint POST /read
 # -----------------------------------------------------------------------------
-
 @app.post("/read", response_model=ReadCardResponse, tags=["Operaciones"])
-async def read_card(sube: SubeApp=Depends(get_sube_controller)):
+async def read_card(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Activates the balance reading/query routine on the card reader.
+    Activates the balance reading routine and returns the raw UI text arrays.
     """
     try:
         result = sube.scan_card()
-        print("result : : ")
-        print(result)
-        # Parse data
-        card_number, balance = parse_card_data(result.get("data", []))
         
-        # Prepare response
-        if result["status"] == "success" and card_number and balance is not None:
-            response = ReadCardResponse(
-                status="success",
-                card_number=card_number,
-                balance=balance,
-                message="Card read successfully"
-            )
-        else:
-            response = ReadCardResponse(
-                status="error",
-                card_number=None,
-                balance=None,
-                message=result.get("message", "Not card read")
-            )
-        
-        return response
-    except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-def parse_card_data(data):
-    """
-    Extracts card number and balance from scanned data.
-    """
-    card_number = None
-    balance = None
-    
-    for item in data:
-        # Extract card number
-        if re.match(r'^\d{4}\s\d{4}\s\d{4}\s\d{4}$', item):
-            card_number = item.replace(" ", "")
+        if result.get("status") == "success":
+            return {"status":"success",
+                    "data":result.get("data", []),
+                    "message":"Card read successfully"}
             
-        # Extract balance
-        elif re.match(r'^\$[\d,.]+$', item):
-            balance_str = item.replace("$", "").replace(",", ".")
-            try:
-                balance = float(balance_str)
-            except ValueError:
-                pass
-    
-    return card_number, balance
+        return {"status":"error",
+                "data":[],
+                "message":result.get("message", "No card read or reader unavailable")}
+        
+    except Exception as e:
+        logger.error(f"[CRITICAL] API crash in /read endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error during card reading routine: {str(e)}"
+        )
 
 # -----------------------------------------------------------------------------
 # EndPoint POST /credit-balance
 # -----------------------------------------------------------------------------
-
 @app.post("/credit-balance", response_model=CreditBalanceResponse, tags=["Operaciones"])
-async def credit_balance(sube: SubeApp=Depends(get_sube_controller)):
+async def credit_balance(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Activates the balance reading/query routine on the card reader.
+    Activates the balance crediting routine and returns the raw UI text arrays.
     """
     try:
         result = sube.credit_balance()
         
-        if not isinstance(result, dict) or result.get("status") != "success":
-            error_msg = result.get("message", "Failed to credit balance") if isinstance(result, dict) else "Failed to credit balance"
-            return CreditBalanceResponse(
-                status="error",
-                message=error_msg
-            )
+        if isinstance(result, dict) and result.get("status") == "success":
+            return {"status":"success",
+                    "data":result.get("data", []),
+                    "message":result.get("message", "Credit operation completed successfully.")}
 
-        data = result.get("data", [])
-
-        # Filtramos y parseamos todos los valores monetarios de una sola vez
-        money_values = [
-            parse_credit_balance(m) for m in data if isinstance(m, str) and m.startswith("$")
-        ]
-
-        # Extraemos los valores de forma segura asegurando los 4 elementos
-        balances = (money_values + [None] * 4)[:4]
-
-        return CreditBalanceResponse(
-            status="success",
-            previous_balance=balances[0],
-            amount_loaded=balances[1],
-            new_balance=balances[2],
-            pending_amount=balances[3],
-            message=result.get("message", "Credit operation completed")
-        )
+        error_msg = result.get("message", "Failed to credit balance") if isinstance(result, dict) else "Failed to credit balance"
+        return {"status":"error",
+                "data":[],
+                "message":error_msg}
+    
+        
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-def parse_credit_balance(s: str) -> Optional[float]:
-    try:
-        return float(s.replace("$", "").replace(".", "").replace(",", "."))
-    except (ValueError, AttributeError):
-        return None
+        logger.error(f"[CRITICAL] API crash in /credit-balance endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error during credit balance routine: {str(e)}"
+        )
 
 # -----------------------------------------------------------------------------
 # EndPoint POST /restart
 # -----------------------------------------------------------------------------
-@app.post("/restart", response_model=AccionResponse, tags=["Operaciones"])
-async def restart(sube: SubeApp=Depends(get_sube_controller)):
+@app.post("/restart", response_model=AccionResponse, tags=["Ciclo de Vida"])
+async def restart_application(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Navigates back in the SUBE application interface.
+    Closes the current application instance and starts a fresh one.
     """
     try:
         success = sube.restart()
+        
         if success:
-            return AccionResponse(status="success", message="Navigation back executed")
+            return {
+                "status": "success", 
+                "message": "Application restarted successfully"
+            }
 
-        return AccionResponse(status="error", message="Could not navigate back")
+        return {
+            "status": "error", 
+            "message": "Could not restart the application"
+        }
+        
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
+        logger.error(f"[CRITICAL] API crash in /restart endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error during application restart: {str(e)}"
+        )
