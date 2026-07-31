@@ -54,7 +54,9 @@ def get_sube_controller() -> SubeApp:
             process_name=PROCESS_NAME
         )
     return _sube_instance
-
+# controller = get_sube_controller()
+# controller.open()
+# controller.scan_card()
 # -----------------------------------------------------------------------------
 # Response Classes
 # -----------------------------------------------------------------------------
@@ -266,4 +268,33 @@ async def restart_application(sube: SubeApp = Depends(get_sube_controller)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
             detail=f"Fatal error during application restart: {str(e)}"
+        )
+
+# -----------------------------------------------------------------------------
+# EndPoint POST /float
+# -----------------------------------------------------------------------------
+@app.post("/float", response_model=AccionResponse, tags=["Ciclo de Vida"])
+async def float_application(sube: SubeApp = Depends(get_sube_controller)):
+    """
+    Brings the SUBE application window to the front and sets it to always-on-top.
+    """
+    try:
+        window_floated = sube.float_window()
+        
+        if window_floated:
+            return {
+                "status": "success", 
+                "message": "Application window maximized and locked always-on-top."
+            }
+            
+        return {
+            "status": "error", 
+            "message": "Unable to locate or maximize the application window. Ensure it is open."
+        }
+        
+    except Exception as e:
+        logger.error(f"[CRITICAL] API crash in /float endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Fatal error while trying to float application window: {str(e)}"
         )

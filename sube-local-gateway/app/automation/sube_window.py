@@ -49,6 +49,9 @@ class WindowSube(WindowController):
     def is_maximized(self):
         return self.is_window_maximized(self.title_pattern)
 
+    def always_on_top(self):
+        return self.set_always_on_top(self.title_pattern)
+
     def move_to_right(self):
         return self.reposition_to_right(self.title_pattern)
 

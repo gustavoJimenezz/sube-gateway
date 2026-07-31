@@ -115,23 +115,26 @@ class SubeApp:
         """Interact with the interface and press “Consultar saldo”."""
         if not self.status():
             return {"status": "error", "message": "Application interface is not active or ready."}
-        
+
         try:
+            self.window.maximize()
             if not getattr(self, '_current_window', None):
                 logger.info("[*] Window reference lost or None. Reconnecting...")
                 self._current_window = self.window.connect()
 
-            self.window.maximize()
             time.sleep(1)
 
             app_window = self._current_window
             if app_window is None:
+                self.window.minimize()
                 return {"status": "error", "message": "Could not attach to the application window."}
 
             if not self.window.is_card_reader_connected(app_window):
+                self.window.minimize()
                 return {"status": "error", "message": "Card reader hardware is not connected."}
                 
             if not self.window.is_main_menu_visible(app_window):
+                self.window.minimize()
                 return {"status": "error", "message": "Application is not in the main menu."}
 
             boton_consulta = app_window.Button4
@@ -179,9 +182,11 @@ class SubeApp:
             
             app_window = self._current_window
             if app_window is None:
+                self.window.minimize()
                 return {"status": "error", "message": "Could not attach to the application window."}
 
             if not self.window.is_card_reader_connected(app_window):
+                self.window.minimize()
                 return {"status": "error", "message": "Card reader hardware is not connected."}
 
             botn_credit_balance = app_window.Button5
@@ -263,4 +268,23 @@ class SubeApp:
             return False
         except Exception as e:
             logger.warning(f"[!] Error trying to navigate back: {e}")
+            return False
+
+    def float_window(self) -> bool:
+        """
+        Restores, maximizes, and forces the SUBE window to be always-on-top.
+        Uses the title pattern defined for the application.
+        """
+        try:
+            success = self.window.maximize_window(self.title_pattern)
+            
+            if success:
+                logger.info(f"[+] SUBE window successfully forced to front and always-on-top.")
+                return True
+            
+            logger.warning(f"[!] Could not maximize window. Is the app running?")
+            return False
+            
+        except Exception as e:
+            logger.error(f"[-] Error trying to float SUBE window: {e}")
             return False
