@@ -27,7 +27,6 @@ function checkAndInjectBar() {
 
 // ===== INICIALIZACIÓN DE LA APP =====
 async function initApp() {
-    // Obtener referencias del DOM
     const btnAbrir = document.getElementById('btn-abrir');
     const btnConsultar = document.getElementById('btn-consultar');
     const btnAcreditar = document.getElementById('btn-acreditar');

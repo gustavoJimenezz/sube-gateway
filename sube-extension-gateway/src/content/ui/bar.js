@@ -66,9 +66,9 @@ const html = `
             <div id="sube-logo">
                 <img src="${imageUrl}" alt="SUBE">
             </div>
+            <button id="btn-abrir" class="sube-btn estado-inicial">Abrir App</button>
         </div>
         <div class="sube-section-center">
-            <button id="btn-abrir" class="sube-btn estado-inicial">Abrir App</button>
             <button id="btn-consultar" class="sube-btn estado-inicial" disabled>Consultar ID</button>
             <button id="btn-acreditar" class="sube-btn estado-inicial" disabled>Acreditar</button>
         </div>

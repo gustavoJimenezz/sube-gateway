@@ -1,6 +1,16 @@
 // content/handlers/events.js
-import { getStatus, openApp, readCard, creditBalance } from '../api/client.js';
-import { getAppState, setAppState } from '../state/store.js';
+import { getStatus, openApp, readCard, creditBalance, closeApp } from '../api/client.js';
+import { getAppState } from '../state/store.js';
+
+export async function isAppOpen() {
+    try {
+        const res = await getStatus();
+        const data = await res.json();
+        return data.is_open === true;
+    } catch {
+        return false;
+    }
+}
 
 export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay) {
     if (!btnAbrir) return;
@@ -25,80 +35,54 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         });
     }
 
-    // Función para consultar el estado actual en la API local
-    async function verificarEstadoInicial() {
-        try {
-            const response = await getStatus();
-
-            if (response.ok) {
-                const textData = await response.text();
-                let status = textData.trim().toLowerCase();
-                
-                try {
-                    const jsonData = JSON.parse(textData);
-                    if (jsonData.status) status = jsonData.status.toLowerCase();
-                } catch (e) {}
-
-                if (status === 'open') {
-                    setAppState(true);
-                    setButtonState(btnAbrir, 'estado-abierto', 'App Abierta');
-                    setResult('App SUBE conectada', 'success');
-                    setButtonsEnabled(true);
-                } else {
-                    setAppState(false);
-                    setButtonState(btnAbrir, 'estado-inicial', 'Abrir App');
-                    setResult('App cerrada (Esperando acción...)', 'info');
-                    setButtonsEnabled(false);
-                }
-            } else {
-                throw new Error('API no disponible');
-            }
-        } catch (error) {
-            console.warn('No se pudo verificar el estado inicial con la API local:', error);
-            setAppState(false);
-            setButtonState(btnAbrir, 'estado-inicial', 'Abrir App');
-            setResult('API local desconectada', 'error');
-            setButtonsEnabled(false);
-        }
-    }
-
-    // Ejecutar verificación al aparecer la barra
-    verificarEstadoInicial();
-
-    // Evento Abrir App
     btnAbrir.addEventListener('click', async function () {
-        if (!getAppState()) {
+        const appEstaAbierta = await isAppOpen();
+
+        if (!appEstaAbierta) {
             setButtonState(this, 'estado-abriendo', 'Abriendo...');
-            setResult('Enviando petición a /open...', 'info');
-            setButtonsEnabled(false);
+            setResult('Iniciando programa', 'info');
 
             try {
                 const responseOpen = await openApp();
 
                 if (responseOpen.ok) {
-                    setAppState(true);
-                    setButtonState(this, 'estado-abierto', 'App Abierta');
-                    setResult('App SUBE abierta correctamente', 'success');
+                    setButtonState(this, 'estado-cerrado', 'Cerrar programa');
+                    setResult('App SUBE abierta', 'success');
                     setButtonsEnabled(true);
-                } else {
-                    throw new Error(`Error HTTP al abrir: ${responseOpen.status}`);
                 }
+
             } catch (error) {
                 console.error('Error al ejecutar /open:', error);
-                setAppState(false);
                 setButtonState(this, 'estado-inicial', 'Abrir App');
                 setResult('No se pudo abrir la app local', 'error');
                 setButtonsEnabled(false);
             }
         } else {
-            setResult('La app ya se encuentra abierta', 'success');
+            setButtonState(this, 'estado-cerrando', 'Cerrando...');
+            setResult('Cerrando programa', 'info');
+
+            try {
+                const responseClose = await closeApp();
+
+                if (responseClose.ok) {
+                    setButtonState(this, 'estado-inicial', 'Abrir App');
+                    setResult('App SUBE cerrada', 'success');
+                    setButtonsEnabled(false);
+                }
+
+            } catch (error) {
+                console.error('Error al ejecutar /close:', error);
+                setButtonState(this, 'estado-cerrado', 'Cerrar programa');
+                setResult('No se pudo cerrar la app local', 'error');
+                setButtonsEnabled(true);
+            }
         }
     });
 
-    // Evento Consultar ID
     btnConsultar.addEventListener('click', async function () {
-        if (!getAppState()) return;
-        
+        const appEstaAbierta = await isAppOpen();
+        if (!appEstaAbierta) return;
+
         setButtonState(this, 'estado-consultando', 'Consultando...');
         setResult('Escaneando tarjeta SUBE...', 'info');
         btnAbrir.disabled = true;
@@ -106,7 +90,7 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
 
         try {
             const data = await readCard();
-
+            console.log("esta es la data " + data)
             if (data.status === 'success') {
                 setButtonState(this, 'estado-inicial', `ID: ${data.card_number.slice(0, 4)}...`);
                 setResult(`ID: ${data.card_number} | Saldo: $${data.balance}`, 'success');
@@ -138,7 +122,7 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
     // Evento Acreditar
     btnAcreditar.addEventListener('click', async function () {
         if (!getAppState()) return;
-        
+
         setButtonState(this, 'estado-acreditando', 'Acreditando...');
         setResult('Procesando acreditación...', 'info');
         btnAbrir.disabled = true;

@@ -55,7 +55,6 @@ class WindowSube(WindowController):
     def is_pattern_present_on_screen(self, regex_patterns):
         """Scans the UI once using the window handle and returns True if any match."""
         hwnd = self.get_window_handle(self.title_pattern)
-
         if not hwnd:
             return False
 
@@ -63,14 +62,25 @@ class WindowSube(WindowController):
         actual_window = app.window(handle=hwnd)
 
         text_elements = actual_window.descendants(control_type="Text")
-        captured_texts = [
-            el.window_text().strip() for el in text_elements if el.window_text()
-        ]
+        captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
 
         full_ui_text = " ".join(captured_texts)
-
         for pattern in regex_patterns:
             if re.search(pattern, full_ui_text, re.IGNORECASE):
                 return True
-
         return False
+
+    def is_main_menu_visible(self):
+        hwnd = self.get_window_handle(self.title_pattern)
+
+        if not hwnd:
+            return False
+
+        app = Application(backend="uia").connect(handle=hwnd)
+        window = app.window(handle=hwnd)
+
+        menu_buttons = [
+            btn for btn in window.descendants(control_type="Button") if btn.element_info.name not in ("Minimizar", "Maximizar", "Cerrar")
+        ]
+        
+        return len(menu_buttons) == 6

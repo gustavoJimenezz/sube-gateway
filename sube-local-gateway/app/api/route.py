@@ -9,17 +9,6 @@ from pathlib import Path
 from app.controllers.sube_controller import SubeApp
 
 # -----------------------------------------------------------------------------
-# Init SubeApp instance
-# -----------------------------------------------------------------------------
-def get_sube_controller() -> SubeApp:
-    """Provide the SubeApp instance."""
-    return SubeApp(
-        exe_path=EXE_PATH, 
-        window_title=WINDOW_TITLE, 
-        process_name=PROCESS_NAME
-    )
-
-# -----------------------------------------------------------------------------
 # Init app
 # -----------------------------------------------------------------------------
 def get_sube_path() -> str:
@@ -47,6 +36,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# -----------------------------------------------------------------------------
+# Init SubeApp instance
+# -----------------------------------------------------------------------------
+def get_sube_controller() -> SubeApp:
+    """Provide the SubeApp instance."""
+    return SubeApp(
+        exe_path=EXE_PATH, 
+        window_title=WINDOW_TITLE, 
+        process_name=PROCESS_NAME
+    )
+# app= get_sube_controller()
+# app.scan_card()
 # -----------------------------------------------------------------------------
 # Response Classes
 # -----------------------------------------------------------------------------
@@ -116,15 +117,20 @@ class CreditBalanceResponse:
 # -----------------------------------------------------------------------------
 # EndPoint GET /status
 # -----------------------------------------------------------------------------
-@app.get("/status", response_model=StatusResponse, tags=["Monitoring"])
-async def getstatus(sube: SubeApp=Depends(get_sube_controller)):
+@app.get("/status", tags=["Monitoring"])
+async def get_status(sube: SubeApp = Depends(get_sube_controller)):
     """
-    Checks whether the SUBE application is running.
+    Returns a JSON object indicating whether the SUBE application is running.
     """
-    if sube.status():
-        return StatusResponse(status="open")
-    return StatusResponse(status="closed")
- 
+    try:
+        is_running = bool(sube.status())
+        return {"is_open": is_running}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Error al verificar el estado de la app: {str(e)}"
+        )
+
 # -----------------------------------------------------------------------------
 # EndPoint POST /open
 # -----------------------------------------------------------------------------
@@ -175,6 +181,8 @@ async def read_card(sube: SubeApp=Depends(get_sube_controller)):
     """
     try:
         result = sube.scan_card()
+        print("result : : ")
+        print(result)
         # Parse data
         card_number, balance = parse_card_data(result.get("data", []))
         
@@ -191,7 +199,7 @@ async def read_card(sube: SubeApp=Depends(get_sube_controller)):
                 status="error",
                 card_number=None,
                 balance=None,
-                message=result.get("message", "Failed to read card")
+                message=result.get("message", "Not card read")
             )
         
         return response

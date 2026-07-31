@@ -5,10 +5,10 @@ export function getAppState() {
 }
 
 // Save in chrome.storage
-export function setAppState(estado) {
-  appAbierta = estado;
-  chrome.storage.local.set({ appAbierta: estado });
-}
+// export function setAppState(estado) {
+//   appAbierta = estado;
+//   chrome.storage.local.set({ appAbierta: estado });
+// }
 
 export function loadInitialState() {
   return new Promise((resolve) => {

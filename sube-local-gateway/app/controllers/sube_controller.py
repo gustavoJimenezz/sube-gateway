@@ -8,6 +8,15 @@ from app.logger_config import setup_logger
 
 logger = setup_logger(__name__)
 
+def _menu_not_visible(result: bool) -> bool:
+    """Retorna True si debe reintentar (es decir, si el resultado fue False)."""
+    return not result
+
+def _return_false_on_failure(retry_state):
+    """Callback que fuerza a tenacity a retornar False cuando se agotan los intentos."""
+    logger.error("[!] Failed to return to the main menu after maximum attempts.")
+    return False
+
 class SubeApp:
     def __init__(self, exe_path, window_title, process_name):
         self.exe_path = exe_path
@@ -44,7 +53,7 @@ class SubeApp:
         ]
         return self.window.is_pattern_present_on_screen(regex_patterns=error_patterns)
 
-    def status(self, max_atemps=5, pause=2) -> bool:
+    def status(self) -> bool:
         """Checks if the SUBE application is currently running."""
         logger.info(f"[*] status ...")
         return self.window.is_open(self.procces_name)
@@ -74,7 +83,7 @@ class SubeApp:
         """Verifies if the application is running and starts it if not."""
         logger.info("[*] Opening application...")
         try:
-            if not self.status(self.procces_name):
+            if not self.status():
                 if self._start_process():
                     self.window.move_to_right()
                     self.window.minimize()
@@ -83,13 +92,13 @@ class SubeApp:
         except Exception as e:
             logger.warning(f"[!] Issue during application startup or minimization: {e}")
 
-        return self.status(self.procces_name) is True
+        return self.status() is True
     
     def close(self) -> bool:
         """Terminates the application process using window connection."""
         logger.info("[-] Stopping application...")
         try:
-            if self.status(self.procces_name):
+            if self.status():
                 logger.info("[*] Attempting to close via UI...")
                 app_window = self.window.connect(timeout=5)
                 if app_window:
@@ -99,8 +108,8 @@ class SubeApp:
         except Exception as e:
             logger.warning(f"[!] UI interaction finished or skipped: {e}")
         
-        return self.status(self.procces_name) is False
-    
+        return self.status() is False
+
     @retry(
         stop=stop_after_delay(180),
         wait=wait_fixed(0.5),
@@ -112,37 +121,128 @@ class SubeApp:
         text_elements = app_window.descendants(control_type="Text")
         captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
 
-        if captured_texts and self._is_processing_transaction():
+        if not captured_texts:
             return None
 
-        if captured_texts:
-            return captured_texts
-        return None
+        # 1. Creamos un solo string con lo que capturamos en ESTE instante exacto
+        full_ui_text = " ".join(captured_texts)
+        
+        # 2. Reutilizamos tus patrones de procesamiento directamente sobre este string
+        processing_patterns = [
+            r"aguard(a|á) un instante",
+            r"procesando\.\.\."
+        ]
+        
+        is_processing = any(
+            re.search(pattern, full_ui_text, re.IGNORECASE) 
+            for pattern in processing_patterns
+        )
+
+        # 3. Si detectamos que está procesando en base a los textos capturados, reintentamos
+        if is_processing:
+            logger.info("[*] UI is still processing transaction... retrying.")
+            return None
+
+        # 4. Si hay textos y no tiene patrones de carga, significa que es la pantalla de saldo real
+        return captured_texts
+    
+    # @retry(
+    #     stop=stop_after_delay(180),
+    #     wait=wait_fixed(0.5),
+    #     retry=retry_if_result(lambda result: result is None),
+    #     reraise=True,
+    # )
+    # def _wait_for_ui_data(self, app_window):
+    #     """Polls the UI once and returns the captured text once processing finishes."""
+    #     text_elements = app_window.descendants(control_type="Text")
+    #     captured_texts = [el.window_text().strip() for el in text_elements if el.window_text()]
+
+    #     if captured_texts and self._is_processing_transaction():
+    #         return None
+
+    #     if captured_texts:
+    #         return captured_texts
+    #     return None
 
     def scan_card(self) -> dict:
         """Interact with the interface and press “Consultar saldo”."""
-        if self.status():
+        # 1. Validación de estado general de la app
+        if not self.status():
+            return {"status": "error", "message": "Application interface is not active or ready."}
+            
+        try:
             self.window.maximize()
-            app_window = self.window.connect()
-            if self._is_card_reader_connected():
-                boton_consulta = app_window.Button4
-                boton_consulta.click_input()
-                logger.info("[*] Waiting for a response from the reader hardware...")
+            
+            # 2. Validación de hardware y menú
+            if not self._is_card_reader_connected():
+                return {"status": "error", "message": "Card reader hardware is not connected."}
+                
+            if not self.window.is_main_menu_visible():
+                return {"status": "error", "message": "Application is not in the main menu."}
 
+            # 3. Interacción con la UI
+            app_window = self.window.connect()
+            boton_consulta = app_window.Button4
+            boton_consulta.click_input()
+            logger.info("[*] Waiting for a response from the reader hardware...")
+
+            captured_texts = []
+            
+            # 4. Captura robusta de datos con manejo de excepciones amplio
             try:
                 captured_texts = self._wait_for_ui_data(app_window)
-                if captured_texts and self._is_card_scan_successful():
+
+                # Si tenemos textos y el estado es exitoso, volvemos atrás
+                if captured_texts:
                     self.back()
-            except RetryError as e:
-                logger.error(f"[!] Error : {e}")
+                else:
+                    logger.warning("[!] Data captured but internal scan success validation failed.")
+                    # Decide si quieres forzar self.back() aquí también para resetear la UI
+                    self.back() 
+                    
+            except Exception as ui_error: 
+                # Captura RetryError y cualquier error de automatización de UI
+                logger.error(f"[!] UI Interaction Error: {ui_error}")
                 captured_texts = []
-                
+
             logger.info(f"[debug] Captured Data after completion: {captured_texts}")
 
+            # 5. Retorno final basado en el resultado real
             if captured_texts:
                 self.window.minimize()
                 return {"status": "success", "data": captured_texts}
-        return {"status": "error", "message": "No data captured from the interface."}
+                
+            return {"status": "error", "message": "No data could be read from the card window."}
+
+        except Exception as general_error:
+            logger.critical(f"[CRITICAL] Unexpected crash in scan_card: {general_error}")
+            return {"status": "error", "message": f"Unexpected fatal error: {str(general_error)}"}
+
+    # def scan_card(self) -> dict:
+    #     """Interact with the interface and press “Consultar saldo”."""
+    #     if self.status():
+    #         self.window.maximize()
+    #         app_window = self.window.connect()
+            
+    #         if self._is_card_reader_connected() and self.window.is_main_menu_visible():
+    #             boton_consulta = app_window.Button4
+    #             boton_consulta.click_input()
+    #             logger.info("[*] Waiting for a response from the reader hardware...")
+
+    #             try:
+    #                 captured_texts = self._wait_for_ui_data(app_window)
+    #                 if captured_texts and self._is_card_scan_successful():
+    #                     self.back()
+    #             except RetryError as e:
+    #                 logger.error(f"[!] Error : {e}")
+    #                 captured_texts = []
+                    
+    #             logger.info(f"[debug] Captured Data after completion: {captured_texts}")
+
+    #             if captured_texts:
+    #                 self.window.minimize()
+    #                 return {"status": "success", "data": captured_texts}
+    #     return {"status": "error", "message": "No data captured from the interface."}
 
     def credit_balance(self) -> dict:
         """Interact with the interface and press “Acreditar”."""
@@ -185,8 +285,20 @@ class SubeApp:
             logger.error("[!] Failed to restart the application properly.")
         return success
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(1.5),
+        retry=retry_if_result(_menu_not_visible),
+        retry_error_callback=_return_false_on_failure  # <-- Esto intercepta el error y devuelve False
+    )
     def back(self) -> bool:
-        """Returns to the previous screen by clicking the lowest button."""
+        """Returns to the previous screen by clicking the lowest button.
+        Guaranteed to return ONLY True (success) or False (failed after all retries).
+        """
+        if self.window.is_main_menu_visible():
+            logger.info("[*] Successfully in main menu.")
+            return True
+            
         try:
             app_window = self.window.connect(timeout=5)
             window_rect = app_window.rectangle()
@@ -196,10 +308,33 @@ class SubeApp:
                 coords = button.rectangle()
                 if coords.top > y_threshold:
                     button.click_input()
-                    return True
+                    logger.info("[*] 'Back' button clicked. Verifying state...")
+                    
+                    time.sleep(0.5) 
+                    return self.window.is_main_menu_visible()
                     
             logger.warning("[!] 'Back' button not found in the lower section.")
             return False
+            
         except Exception as e:
             logger.warning(f"[!] Error trying to navigate back: {e}")
             return False
+    
+    # def back(self) -> bool:
+    #     """Returns to the previous screen by clicking the lowest button."""
+    #     try:
+    #         app_window = self.window.connect(timeout=5)
+    #         window_rect = app_window.rectangle()
+    #         y_threshold = window_rect.top + (window_rect.height() * 0.7)
+
+    #         for button in app_window.Custom.children(control_type="Button"):
+    #             coords = button.rectangle()
+    #             if coords.top > y_threshold:
+    #                 button.click_input()
+    #                 return True
+                    
+    #         logger.warning("[!] 'Back' button not found in the lower section.")
+    #         return False
+    #     except Exception as e:
+    #         logger.warning(f"[!] Error trying to navigate back: {e}")
+    #         return False
