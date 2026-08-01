@@ -45,7 +45,7 @@ export async function creditBalance() {
   const signal = getSignal()
   const response = await fetch(`${API_BASE}/credit-balance`, {
     method: 'POST',
-    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' }, signal);
   });
   currentController = null;
   return response.json();
