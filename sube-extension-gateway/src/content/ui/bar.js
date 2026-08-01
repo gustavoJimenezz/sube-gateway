@@ -65,7 +65,7 @@ const html = `
                 <img src="${imageUrl}" alt="SUBE">
             </div>
             <button id="btn-abrir" class="sube-btn estado-inicial" style="flex: 2;">Abrir App</button>
-            <button id="btn-reiniciar" class="sube-btn estado-inicial sube-btn-restart" disabled style="max-width: 55px;">Reiniciar</button>
+            <button id="btn-reiniciar" class="sube-btn-restart" style="max-width: 55px; font-weight: 500; font-size:10px;">Reiniciar</button>
         </div>
         <div class="sube-section-center">
           <button id="btn-consultar" class="sube-btn estado-inicial" disabled>Consultar ID</button>   

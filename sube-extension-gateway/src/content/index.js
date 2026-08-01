@@ -39,7 +39,7 @@ async function initApp() {
     }
     
     const isOpen = await isAppOpen();
-    initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir, btnReiniciar);
+    initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir);
     setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay, btnReiniciar);
     console.log('SUBE App inicializada correctamente');
 }
