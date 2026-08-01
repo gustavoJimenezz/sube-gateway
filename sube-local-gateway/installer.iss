@@ -15,7 +15,7 @@ Source: "dist\sube-local-gateway.exe"; DestDir: "{app}"
 
 [Icons]
 Name: "{userstartup}\SUBE Local Gateway"; Filename: "{app}\sube-local-gateway.exe"
-Name: "{userdesktop}\SUBE Local Gateway Logs"; Filename: "{app}\backend.log"
+Name: "{userdesktop}\SUBE Local Gateway Logs"; Filename: "{usertemp}\sube-local-gateway.log"
 Name: "{group}\SUBE Local Gateway"; Filename: "{app}\sube-local-gateway.exe"
 Name: "{group}\Desinstalar"; Filename: "{uninstallexe}"
 
