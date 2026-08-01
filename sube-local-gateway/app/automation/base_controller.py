@@ -5,7 +5,6 @@ from pywinauto.win32functions import GetSystemMetrics
 from app.logger_config import setup_logger
 
 logger = setup_logger(__name__)
-
 class WindowController:
     def get_window_handle(self, title_pattern: str):
         """Searches for the window HWND using regular expressions."""
@@ -74,23 +73,6 @@ class WindowController:
             return True
         return False
     
-    # def minimize_window(self, title_pattern: str):
-    #     """Minimizes the specified window natively."""
-    #     hwnd = self.get_window_handle(title_pattern)
-    #     if hwnd:
-    #         win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
-    #         return True
-    #     return False
-    
-    # def maximize_window(self, title_pattern: str):
-    #     """Restores and maximizes (brings to front) the specified window."""
-    #     hwnd = self.get_window_handle(title_pattern)
-    #     if hwnd:
-    #         win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-    #         win32gui.SetForegroundWindow(hwnd)
-    #         return True
-    #     return False
-    
     def is_window_minimized(self, title_pattern: str):
         """Returns True if the window is currently minimized."""
         hwnd = self.get_window_handle(title_pattern)
@@ -126,56 +108,3 @@ class WindowController:
 
         win32gui.MoveWindow(hwnd, new_x, new_y, w_width, w_height, True)
         logger.info(f"[+] Window repositioned via Win32 API to X: {new_x}, Y: {new_y}")
-
-    # def set_always_on_top(self, enable: bool = True) -> bool:
-    #     """
-    #     Forces the window to the front, ensures it is restored/visible, 
-    #     and toggles its permanently floating state.
-    #     """
-    #     hwnd = self.get_window_handle(self.title_pattern)
-    #     if hwnd:
-    #         if enable:
-    #             if win32gui.IsIconic(hwnd):
-    #                 win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                
-    #             win32gui.ShowWindow(hwnd, win32con.SW_SHOW) 
-            
-    #         z_order = win32con.HWND_TOPMOST if enable else win32con.HWND_NOTOPMOST
-    #         win32gui.SetWindowPos(
-    #             hwnd, 
-    #             z_order, 
-    #             0, 0, 0, 0, 
-    #             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
-    #         )
-            
-    #         estado = "enabled" if enable else "disabled"
-    #         logger.info(f"[+] Always-on-top {estado} and forced visible for window: {self.title_pattern}")
-    #         return True
-            
-    #     logger.warning(f"[!] Window not found: {self.title_pattern}")
-    #     return False
-
-    # def set_always_on_top(self, title_pattern: str, enable: bool = True) -> bool:
-    #     """
-    #     Enables or disables the permanent floating (Always on Top) mode 
-    #     for the specified window without altering its size or position.
-    #     """
-    #     hwnd = self.get_window_handle(title_pattern)
-    #     if hwnd:
-    #         # Seleccionamos la bandera de Windows según el parámetro 'enable'
-    #         z_order = win32con.HWND_TOPMOST if enable else win32con.HWND_NOTOPMOST
-            
-    #         # Aplicamos el estado en el eje Z de Windows
-    #         win32gui.SetWindowPos(
-    #             hwnd, 
-    #             z_order, 
-    #             0, 0, 0, 0, 
-    #             win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
-    #         )
-            
-    #         estado = "enabled" if enable else "disabled"
-    #         logger.info(f"[+] Always-on-top {estado} for window: {title_pattern}")
-    #         return True
-            
-    #     logger.warning(f"[!] Could not set always-on-top. Window not found: {title_pattern}")
-    #     return False

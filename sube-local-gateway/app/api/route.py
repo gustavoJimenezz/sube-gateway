@@ -55,6 +55,7 @@ def get_sube_controller() -> SubeApp:
         )
     return _sube_instance
 # controller = get_sube_controller()
+# import pdb;pdb.set_trace()
 # controller.open()
 # controller.scan_card()
 # -----------------------------------------------------------------------------

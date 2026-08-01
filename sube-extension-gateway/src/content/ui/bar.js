@@ -56,8 +56,6 @@ const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 150">
   </g>
 </svg>`;
 
-// const imageUrl = chrome.runtime.getURL('icon-sube.jpg');
-// const imageUrl = chrome.runtime.getURL("dist/icon-sube.jpg");
 const imageUrl = chrome.runtime.getURL("src/public/icon-sube.jpg");
 const html = `
     <div id="sube-bar">
@@ -66,11 +64,12 @@ const html = `
             <div id="sube-logo">
                 <img src="${imageUrl}" alt="SUBE">
             </div>
-            <button id="btn-abrir" class="sube-btn estado-inicial">Abrir App</button>
+            <button id="btn-abrir" class="sube-btn estado-inicial" style="flex: 2;">Abrir App</button>
+            <button id="btn-reiniciar" class="sube-btn estado-inicial sube-btn-restart" disabled style="max-width: 55px;">Reiniciar</button>
         </div>
         <div class="sube-section-center">
-            <button id="btn-consultar" class="sube-btn estado-inicial" disabled>Consultar ID</button>
-            <button id="btn-acreditar" class="sube-btn estado-inicial" disabled>Acreditar</button>
+          <button id="btn-consultar" class="sube-btn estado-inicial" disabled>Consultar ID</button>   
+          <button id="btn-acreditar" class="sube-btn estado-inicial" disabled>Acreditar</button>
         </div>
         <div class="sube-section-right">
             <div id="sube-output">

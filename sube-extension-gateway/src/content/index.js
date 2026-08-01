@@ -28,6 +28,7 @@ function checkAndInjectBar() {
 // ===== INICIALIZACIÓN DE LA APP =====
 async function initApp() {
     const btnAbrir = document.getElementById('btn-abrir');
+    const btnReiniciar = document.getElementById('btn-reiniciar');
     const btnConsultar = document.getElementById('btn-consultar');
     const btnAcreditar = document.getElementById('btn-acreditar');
     const resultDisplay = document.getElementById('sube-result');
@@ -38,8 +39,8 @@ async function initApp() {
     }
     
     const isOpen = await isAppOpen();
-    initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir);
-    setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay);
+    initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir, btnReiniciar);
+    setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay, btnReiniciar);
     console.log('SUBE App inicializada correctamente');
 }
 

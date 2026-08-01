@@ -23,8 +23,9 @@
 .sube-section-left {
     font-weight: 400;
     display: flex;
+    justify-content: center;
     align-items: center;
-    gap: 12px;
+    gap: 0.5rem;
     min-width: 160px;
 }
 
@@ -74,6 +75,17 @@
     position: relative !important;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
     outline: none !important;
+}
+
+.sube-btn-restart {
+    padding: 10px 22px !important;
+    border-radius: 5px !important;
+    font-weight: 500 !important;
+    font-size:10px !important;
+}
+
+.sube-btn {
+    border-radius: 5px !important;
 }
 
 .sube-btn:not(:disabled):hover {

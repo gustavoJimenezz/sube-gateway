@@ -1,4 +1,15 @@
-import { getStatus, openApp, readCard, creditBalance, closeApp } from '../api/client.js';
+import { getStatus, openApp, readCard, creditBalance, closeApp, restart } from '../api/client.js';
+
+export async function isAppOpen() {
+    try {
+        const res = await getStatus();
+        const data = await res.json();
+        
+        return data.status === "open";
+    } catch (err) {
+        return false;
+    }
+}
 
 function setButtonState(btn, state, text) {
     if (!btn) return;
@@ -12,20 +23,8 @@ function setButtonsEnabled(enabled, secondaryButtons) {
     });
 }
 
-export async function isAppOpen() {
-    try {
-        const res = await getStatus();
-        const data = await res.json();
-
-        return data.status === "open";
-    } catch (err) {
-        console.error(err);
-        return false;
-    }
-}
-
-export function initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir){
-        secondaryButtons = [btnConsultar, btnAcreditar]
+export function initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir, btnReiniciar) {
+        secondaryButtons = [btnConsultar, btnAcreditar, btnReiniciar]
         if (isOpen) {
             setButtonState(btnAbrir, 'estado-cerrado', 'Cerrar programa');
             setButtonsEnabled(true, secondaryButtons);
@@ -36,7 +35,7 @@ export function initialButtonsSet(isOpen, btnConsultar, btnAcreditar, btnAbrir){
         }
 }
 
-export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay) {
+export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultDisplay, btnReiniciar) {
     if (!btnAbrir) return;
 
     const secondaryButtons = [btnConsultar, btnAcreditar];
@@ -91,17 +90,22 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
     });
 
     btnConsultar.addEventListener('click', async function () {
-        const appEstaAbierta = await isAppOpen();
-        if (!appEstaAbierta) return;
+        // const appEstaAbierta = await isAppOpen();
+        // if (!appEstaAbierta) return;
 
         setButtonState(this, 'estado-consultando', 'Consultando ..');
         setResult('Escaneando tarjeta SUBE...', 'info');
-        btnAbrir.disabled = true;
-        btnAcreditar.disabled = true;
+        setButtonsEnabled(true, [btnAbrir, btnAcreditar])
+        // btnAbrir.disabled = true;
+        // btnAcreditar.disabled = true;
 
         try {
             const data = await readCard();
+            console.log("debud status: ", data.status)
+            console.log("debud : ", data.data)
             if (data.status === 'success') {
+
+
                 setButtonState(this, 'estado-inicial', `ID: ${data.card_number.slice(0, 4)}...`);
                 setResult(`ID: ${data.card_number} | Saldo: $${data.balance}`, 'success');
 
@@ -129,7 +133,6 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         }
     });
 
-    // Evento Acreditar
     btnAcreditar.addEventListener('click', async function () {
         // if (!getAppState()) return;
 
@@ -158,5 +161,28 @@ export function setupEventHandlers(btnAbrir, btnConsultar, btnAcreditar, resultD
         }
     });
 
+    btnReiniciar.addEventListener('click', async function () {
+        setResult('Cancelando operaciones y reiniciando programa...', 'info');
+
+        try {
+            const data = await restart(); 
+            if (data.status === 'success') {
+                setButtonState(this, 'estado-inicial', 'Reiniciar');
+                setResult('Programa reiniciado con éxito', 'success');
+
+            } else {
+                setButtonState(this, 'estado-inicial', 'Reiniciar');
+                setResult(data.message || 'No se pudo reiniciar la aplicación', 'error');
+            }
+
+        } catch (error) {
+            console.error('Error al conectar con la API para reiniciar:', error);
+            setButtonState(this, 'estado-inicial', 'Reiniciar');
+            setResult('Error de conexión al intentar reiniciar la app local', 'error');
+        } finally {
+            setButtonsEnabled(true, otrosBotones);
+        }
+    });
+        
     console.log('SUBE Bar Event Handlers configurados correctamente');
 }
